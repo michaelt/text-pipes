@@ -1,9 +1,9 @@
 text-pipes
 ==========
 
-Text pipes, somehow to be fused with `pipes-text`.
-This follows the pattern of `pipes-bytestring` by the
-expedient of regular expressions, and adds a few 
+Text pipes, somehow to be fused with [`pipes-text`](https://github.com/ibotty/pipes-text).
+This follows the pattern of `pipes-bytestring` (largely by skillful use of the
+expedient of regular expressions), and adds a few 
 `pipes-prelude`-like operations for testing.
 
 
