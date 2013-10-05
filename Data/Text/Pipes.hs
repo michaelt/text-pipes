@@ -1,20 +1,29 @@
 {-# LANGUAGE RankNTypes, TypeFamilies #-}
 
-{-| This module provides @pipes@ utilities for \"byte streams\", which are
-    streams of strict 'Text's chunks.  Use byte streams to interact
+{-| This module provides @pipes@ utilities for \"text streams\", which are
+    streams of strict 'Text' chunks.  Use text streams to interact
     with both 'IO.Handle's and lazy 'Text's.
 
     To stream to or from 'IO.Handle's, use 'fromHandle' or 'toHandle'.  For
     example, the following program copies data from one file to another:
 
 > import Pipes
-> import qualified Pipes.Text as P
+> import qualified Data.Text.Pipes as P
 > import System.IO
 >
 > main =
 >     withFile "inFile.txt"  ReadMode  $ \hIn  ->
 >     withFile "outFile.txt" WriteMode $ \hOut ->
 >     runEffect $ P.fromHandle hIn >-> P.toHandle hOut
+
+      The following is the more Prelude-like and uses Pipes.Safe:
+      
+> import Pipes
+> import qualified Data.Text.Pipes as P
+> import Pipes.Safe
+>
+> main = runSafeT $ runEffect $ P.readFile "inFile.txt" >-> P.writeFile "outFile.txt"
+
 
     You can stream to and from 'stdin' and 'stdout' using the predefined 'stdin'
     and 'stdout' proxies, like in the following \"echo\" program:
