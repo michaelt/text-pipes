@@ -205,13 +205,24 @@ stdin :: MonadIO m => Producer' Text m ()
 stdin = fromHandle IO.stdin
 {-# INLINABLE stdin #-}
 
--- | Convert a 'IO.Handle' into a byte stream using a default chunk size
+-- | Convert a 'IO.Handle' into a text stream using a chunk size 
+-- determined by the good sense of the text library. 
 fromHandle :: MonadIO m => IO.Handle -> Producer' Text m ()
 fromHandle h = go where
     go = do txt <- liftIO (T.hGetChunk h)
             unless (T.null txt) $ do yield txt
                                      go
 {-# INLINABLE fromHandle#-}
+
+{-| Stream text from a file using Pipes.Safe
+
+>>> runSafeT $ runEffect $ readFile "README.md" >-> map toUpper >-> hoist lift stdout
+TEXT-PIPES
+==========
+TEXT PIPES, SOMEHOW TO BE FUSED WITH `PIPES-TEXT`.
+...
+>>>
+-}
 
 readFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Producer' Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
