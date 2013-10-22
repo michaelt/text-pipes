@@ -12,15 +12,15 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Data.Text.Pipes
+  exposed-modules:     Data.Text.Pipes, Data.Text.Pipes.Parse
   -- other-modules:       
   other-extensions:    RankNTypes
   build-depends:       base         >= 4       && < 5  ,
                        transformers >= 0.2.0.0 && < 0.4,
                        pipes >=4.0             && < 4.2,
-                       pipes-parse >=2.0       && < 2.1,
+                       pipes-parse >=2.0       && < 2.2,
                        pipes-safe, 
-                       pipes-bytestring >= 1.0 && < 1.1,
+                       pipes-bytestring >= 1.0 && < 1.2,
                        transformers >= 0.3     && < 0.4,
                        text >=0.11             && < 0.12,
                        bytestring >=0.10       && < 0.11

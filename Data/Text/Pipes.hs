@@ -1,61 +1,58 @@
-{-# LANGUAGE RankNTypes, TypeFamilies #-}
+{-# LANGUAGE RankNTypes, TypeFamilies, CPP #-}
 
 {-| This module provides @pipes@ utilities for \"text streams\", which are
-    streams of strict 'Text' chunks.  Use text streams to interact
-    with both 'IO.Handle's and lazy 'Text's.
+    streams of 'Text' chunks.  The individual chunks are uniformly @strict@, but 
+    can interact lazy 'Text's  and 'IO.Handle's.
 
     To stream to or from 'IO.Handle's, use 'fromHandle' or 'toHandle'.  For
-    example, the following program copies data from one file to another:
+    example, the following program copies a document from one file to another:
 
 > import Pipes
-> import qualified Data.Text.Pipes as P
+> import qualified Data.Text.Pipes as Text
 > import System.IO
 >
 > main =
 >     withFile "inFile.txt"  ReadMode  $ \hIn  ->
 >     withFile "outFile.txt" WriteMode $ \hOut ->
->     runEffect $ P.fromHandle hIn >-> P.toHandle hOut
+>     runEffect $ Text.fromHandle hIn >-> Text.toHandle hOut
 
-      The following is the more Prelude-like and uses Pipes.Safe:
-      
+To stream from files, the following is perhaps more Prelude-like (note that it uses Pipes.Safe):
+
 > import Pipes
-> import qualified Data.Text.Pipes as P
+> import qualified Data.Text.Pipes as Text
 > import Pipes.Safe
 >
-> main = runSafeT $ runEffect $ P.readFile "inFile.txt" >-> P.writeFile "outFile.txt"
-
+> main = runSafeT $ runEffect $ Text.readFile "inFile.txt" >-> Text.writeFile "outFile.txt"
 
     You can stream to and from 'stdin' and 'stdout' using the predefined 'stdin'
-    and 'stdout' proxies, like in the following \"echo\" program:
+    and 'stdout' proxies, as with the following \"echo\" program:
 
-> main = runEffect $ P.stdin >-> P.stdout
+> main = runEffect $ Text.stdin >-> Text.stdout
 
     You can also translate pure lazy 'TL.Text's to and from proxies:
 
-> import qualified Data.Text.Lazy as TL
->
-> main = runEffect $ P.fromLazy (TL.pack "Hello, world!\n") >-> P.stdout
+> main = runEffect $ Text.fromLazy (TL.pack "Hello, world!\n") >-> Text.stdout
 
     In addition, this module provides many functions equivalent to lazy
-    'Text' functions so that you can transform or fold byte streams.  For
+    'Text' functions so that you can transform or fold text streams.  For
     example, to stream only the first three lines of 'stdin' to 'stdout' you
-    would write:
+    might write:
 
 > import Pipes
-> import qualified Pipes.Text as PT
-> import qualified Pipes.Parse      as PP
+> import qualified Pipes.Text as Text
+> import qualified Pipes.Parse as Parse
 >
-> main = runEffect $ takeLines 3 PB.stdin >-> PT.stdout
+> main = runEffect $ takeLines 3 Text.stdin >-> Text.stdout
 >   where
->     takeLines n = PB.unlines . PP.takeFree n . PT.lines
+>     takeLines n = Text.unlines . Parse.takeFree n . Text.lines
 
-    The above program will never bring more than one chunk (~ 32 KB) into
+    The above program will never bring more than one chunk of text (~ 32 KB) into
     memory, no matter how long the lines are.
 
     Note that functions in this library are designed to operate on streams that
-    are insensitive to chunk boundaries.  This means that they may freely split
-    chunks into smaller chunks and /discard empty chunks/.  However, they will
-    /never concatenate chunks/ in order to provide strict upper bounds on memory
+    are insensitive to text boundaries.  This means that they may freely split
+    text into smaller texts and /discard empty texts/.  However, they will
+    /never concatenate texts/ in order to provide strict upper bounds on memory
     usage.
 -}
 
@@ -66,12 +63,6 @@ module Data.Text.Pipes  (
     fromHandle,
     readFile,
     stdinLn,
--- hGetSome,
--- hGet,
-
-    -- * Servers
--- hGetSomeN,
--- hGetN,
 
     -- * Consumers
     stdout,
@@ -87,8 +78,6 @@ module Data.Text.Pipes  (
     takeWhile,
     dropWhile,
     filter,
---    elemIndices,
---    findIndices,
     scan,
 
     -- * Folds
@@ -103,13 +92,11 @@ module Data.Text.Pipes  (
     all,
     maximum,
     minimum,
---    elem,
---    notElem,
     find,
     index,
 --    elemIndex,
 --    findIndex,
---    count,
+    count,
 
     -- * Splitters
     splitAt,
@@ -122,28 +109,28 @@ module Data.Text.Pipes  (
     group,
     lines,
     words,
-
+#if MIN_VERSION_text(0,11,4)
+    decodeUtf8,
+#endif
     -- * Transformations
     intersperse,
-
+    
     -- * Joiners
     intercalate,
     unlines,
     unwords,
 
-    -- * Low-level Parsers
+    -- * Character Parsers
     -- $parse
-    nextByte,
-    drawByte,
-    unDrawByte,
-    peekByte,
-    isEndOfBytes,
---    takeWhile',
+    nextChar,
+    drawChar,
+    unDrawChar,
+    peekChar,
+    isEndOfChars,
 
     -- * Re-exports
     -- $reexports
     module Data.Text,
---    module Data.Word,
     module Pipes.Parse
     ) where
 
@@ -152,11 +139,14 @@ import Control.Monad (liftM, unless)
 import Control.Monad.Trans.State.Strict (StateT)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Text.Encoding as TE
 import Data.Text (Text)
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TL
 import Data.Text.Lazy.Internal (foldrChunks, defaultChunkSize)
 import Data.ByteString.Unsafe (unsafeTake, unsafeDrop)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import Data.Char (ord)
 import Data.Functor.Identity (Identity)
 import qualified Data.List as List
@@ -164,8 +154,8 @@ import Foreign.C.Error (Errno(Errno), ePIPE)
 import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString.Parse as PBP
-import Pipes.ByteString.Parse (
-    nextByte, drawByte, unDrawByte, peekByte, isEndOfBytes )
+import Data.Text.Pipes.Parse (
+    nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
 import Pipes.Core (respond, Server')
 import qualified Pipes.Parse as PP
 import Pipes.Parse (input, concat, FreeT)
@@ -214,8 +204,11 @@ stdin :: MonadIO m => Producer' Text m ()
 stdin = fromHandle IO.stdin
 {-# INLINABLE stdin #-}
 
--- | Convert a 'IO.Handle' into a text stream using a chunk size 
--- determined by the good sense of the text library. 
+{-| Convert a 'IO.Handle' into a text stream using a text size 
+    determined by the good sense of the text library. 
+
+-}
+
 fromHandle :: MonadIO m => IO.Handle -> Producer' Text m ()
 fromHandle h = go where
     go = do txt <- liftIO (T.hGetChunk h)
@@ -225,21 +218,26 @@ fromHandle h = go where
 
 {-| Stream text from a file using Pipes.Safe
 
->>> runSafeT $ runEffect $ readFile "README.md" >-> map toUpper >-> hoist lift stdout
-TEXT-PIPES
-==========
-TEXT PIPES, SOMEHOW TO BE FUSED WITH `PIPES-TEXT`.
-...
->>>
+>>> runSafeT $ runEffect $ Text.readFile "hello.hs" >-> Text.map toUpper >-> hoist lift Text.stdout
+MAIN = PUTSTRLN "HELLO WORLD"
 -}
 
 readFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Producer' Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
 {-# INLINABLE readFile #-}
 
+{-| Stream lines of text from stdin (for testing in ghci etc.) 
+
+>>> let safely = runSafeT . runEffect
+>>> safely $ for Text.stdinLn (lift . lift . print . T.length)
+hello
+5
+world
+5
+
+-}
 stdinLn :: MonadIO m => Producer' Text m ()
-stdinLn = go
-  where
+stdinLn = go where
     go = do
         eof <- liftIO (IO.hIsEOF IO.stdin)
         unless eof $ do
@@ -247,56 +245,13 @@ stdinLn = go
             yield txt
             go
 
-{-| Convert a handle into a byte stream using a fixed chunk size
 
-    'hGet' waits until exactly the requested number of bytes are available for
-    each chunk.
--}
--- hGet :: MonadIO m => Int -> IO.Handle -> Producer' Text m ()
--- hGet size h = go where
---     go = do
---         eof <- liftIO (IO.hIsEOF h)
---         if eof
---             then return ()
---             else do
---                 bs <- liftIO (T.hGet h size)
---                 yield bs
---                 go
--- {-# INLINABLE hGet #-}
-
-{-| Like 'hGetSome', except you can vary the maximum chunk size for each request
--}
--- hGetSomeN :: MonadIO m => IO.Handle -> Int -> Server' Int Text m ()
--- hGetSomeN h = go where
---     go size = do
---         eof <- liftIO (IO.hIsEOF h)
---         if eof
---             then return ()
---             else do
---                 bs    <- liftIO (T.hGetSome h size)
---                 size2 <- respond bs
---                 go size2
--- {-# INLINABLE hGetSomeN #-}
--- 
--- -- | Like 'hGet', except you can vary the chunk size for each request
--- hGetN :: MonadIO m => IO.Handle -> Int -> Server' Int Text m ()
--- hGetN h = go where
---     go size = do
---         eof <- liftIO (IO.hIsEOF h)
---         if eof
---             then return ()
---             else do
---                 bs    <- liftIO (T.hGet h size)
---                 size2 <- respond bs
---                 go size2
--- {-# INLINABLE hGetN #-}
-
-{-| Stream bytes to 'stdout'
+{-| Stream text to 'stdout'
 
     Unlike 'toHandle', 'stdout' gracefully terminates on a broken output pipe.
 
     Note: For best performance, use @(for source (liftIO . putStr))@ instead of
-    @(source >-> stdout)@.
+    @(source >-> stdout)@ in suitable cases.
 -}
 stdout :: MonadIO m => Consumer' Text m ()
 stdout = go
@@ -328,15 +283,16 @@ stdoutLn = go
            Right () -> go
 {-# INLINABLE stdoutLn #-}
 
-{-| Convert a byte stream into a 'Handle'
+{-| Convert a text stream into a 'Handle'
 
-    Note: For best performance, use @(for source (liftIO . hPutStr handle))@
-    instead of @(source >-> toHandle handle)@.
+    Note: again, for best performance, where possible use 
+    @(for source (liftIO . hPutStr handle))@ instead of @(source >-> toHandle handle)@.
 -}
 toHandle :: MonadIO m => IO.Handle -> Consumer' Text m r
 toHandle h = for cat (liftIO . T.hPutStr h)
 {-# INLINABLE toHandle #-}
 
+-- | Stream text into a file. Uses @pipes-safe@.
 writeFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Consumer' Text m ()
 writeFile file = Safe.withFile file IO.WriteMode toHandle
 
@@ -345,65 +301,66 @@ map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
 map f = P.map (T.map f)
 {-# INLINABLE map #-}
 
--- | Map a function over the byte stream and concatenate the results
+-- | Map a function over the characters of a text stream and concatenate the results
 concatMap
     :: (Monad m) => (Char -> Text) -> Pipe Text Text m r
 concatMap f = P.map (T.concatMap f)
 {-# INLINABLE concatMap #-}
 
--- | @(take n)@ only allows @n@ bytes to pass
+-- | @(take n)@ only allows @n@ individual characters to pass; 
+--  contrast @Pipes.Prelude.take@ which would let @n@ chunks pass.
 take :: (Monad m, Integral a) => a -> Pipe Text Text m ()
 take n0 = go n0 where
     go n
         | n <= 0    = return ()
         | otherwise = do
-            bs <- await
-            let len = fromIntegral (T.length bs)
+            txt <- await
+            let len = fromIntegral (T.length txt)
             if (len > n)
-                then yield (T.take (fromIntegral n) bs)
+                then yield (T.take (fromIntegral n) txt)
                 else do
-                    yield bs
+                    yield txt
                     go (n - len)
 {-# INLINABLE take #-}
 
--- | @(dropD n)@ drops the first @n@ bytes
+-- | @(drop n)@ drops the first @n@ characters
 drop :: (Monad m, Integral a) => a -> Pipe Text Text m r
 drop n0 = go n0 where
     go n
         | n <= 0    = cat
         | otherwise = do
-            bs <- await
-            let len = fromIntegral (T.length bs)
+            txt <- await
+            let len = fromIntegral (T.length txt)
             if (len >= n)
                 then do
-                    yield (T.drop (fromIntegral n) bs)
+                    yield (T.drop (fromIntegral n) txt)
                     cat
                 else go (n - len)
 {-# INLINABLE drop #-}
 
--- | Take bytes until they fail the predicate
+-- | Take characters until they fail the predicate
 takeWhile :: (Monad m) => (Char -> Bool) -> Pipe Text Text m ()
 takeWhile predicate = go
   where
     go = do
-        bs <- await
-        let (prefix, suffix) = T.span predicate bs
+        txt <- await
+        let (prefix, suffix) = T.span predicate txt
         if (T.null suffix)
             then do
-                yield bs
+                yield txt
                 go
             else yield prefix
 {-# INLINABLE takeWhile #-}
 
--- | Drop bytes until they fail the predicate
+-- | Drop characters until they fail the predicate
 dropWhile :: (Monad m) => (Char -> Bool) -> Pipe Text Text m r
 dropWhile predicate = go where
     go = do
-        bs <- await
-        case T.findIndex (not . predicate) bs of
+        txt <- await
+        case T.findIndex (not . predicate) txt of
             Nothing -> go
             Just i -> do
-                yield (T.drop i bs)
+                yield (T.drop i txt)
                 cat
 {-# INLINABLE dropWhile #-}
 
@@ -412,33 +369,19 @@ filter :: (Monad m) => (Char -> Bool) -> Pipe Text Text m r
 filter predicate = P.map (T.filter predicate)
 {-# INLINABLE filter #-}
 
--- | Stream all indices whose elements match the given 'Char'
--- elemIndices :: (Monad m, Num n) => Char -> Pipe Text n m r
--- elemIndices w8 = findIndices (w8 ==)
--- {-# INLINABLE elemIndices #-}
 
--- | Stream all indices whose elements satisfy the given predicate
--- findIndices :: (Monad m, Num n) => (Char -> Bool) -> Pipe Text n m r
--- findIndices predicate = go 0
---   where
---     go n = do
---         bs <- await
---  each $ List.map (\i -> n + fromIntegral i) (T.findIndices predicate bs)
---         go $! n + fromIntegral (T.length bs)
--- {-# INLINABLE findIndices #-}
-
--- | Strict left scan over the bytes
+-- | Strict left scan over the characters
 scan
     :: (Monad m)
     => (Char -> Char -> Char) -> Char -> Pipe Text Text m r
 scan step begin = go begin
   where
-    go w8 = do
-        bs <- await
-        let bs' = T.scanl step w8 bs
-            w8' = T.last bs'
-        yield bs'
-        go w8'
+    go c = do
+        txt <- await
+        let txt' = T.scanl step c txt
+            c' = T.last txt'
+        yield txt'
+        go c'
 {-# INLINABLE scan #-}
 
 {-| Fold a pure 'Producer' of strict 'Text's into a lazy
@@ -459,11 +402,11 @@ toLazyM :: (Monad m) => Producer Text m () -> m TL.Text
 toLazyM = liftM TL.fromChunks . P.toListM
 {-# INLINABLE toLazyM #-}
 
--- | Reduce the stream of bytes using a strict left fold
+-- | Reduce the text stream using a strict left fold over characters
 fold
     :: Monad m
     => (x -> Char -> x) -> x -> (x -> r) -> Producer Text m () -> m r
-fold step begin done = P.fold (\x bs -> T.foldl' step x bs) begin done
+fold step begin done = P.fold (T.foldl' step) begin done
 {-# INLINABLE fold #-}
 
 -- | Retrieve the first 'Char'
@@ -474,7 +417,7 @@ head = go
         x <- nextChar p
         case x of
             Left   _      -> return  Nothing
-            Right (w8, _) -> return (Just w8)
+            Right (c, _) -> return (Just c)
 {-# INLINABLE head #-}
 
 -- | Retrieve the last 'Char'
@@ -485,12 +428,10 @@ last = go Nothing
         x <- next p
         case x of
             Left   ()      -> return r
-            Right (bs, p') ->
-                if (T.null bs)
+            Right (txt, p') ->
+                if (T.null txt)
                 then go r p'
-                else go (Just $ T.last bs) p'
-                -- TODO: Change this to 'unsafeLast' when bytestring-0.10.2.0
-                --       becomes more widespread
+                else go (Just $ T.last txt) p'
 {-# INLINABLE last #-}
 
 -- | Determine if the stream is empty
@@ -500,7 +441,7 @@ null = P.all T.null
 
 -- | Count the number of bytes
 length :: (Monad m, Num n) => Producer Text m () -> m n
-length = P.fold (\n bs -> n + fromIntegral (T.length bs)) 0 id
+length = P.fold (\n txt -> n + fromIntegral (T.length txt)) 0 id
 {-# INLINABLE length #-}
 
 -- | Fold that returns whether 'M.Any' received 'Char's satisfy the predicate
@@ -517,37 +458,25 @@ all predicate = P.all (T.all predicate)
 maximum :: (Monad m) => Producer Text m () -> m (Maybe Char)
 maximum = P.fold step Nothing id
   where
-    step mw8 bs =
-        if (T.null bs)
-        then mw8
-        else Just $ case mw8 of
-            Nothing -> T.maximum bs
-            Just w8 -> max w8 (T.maximum bs)
+    step mc txt =
+        if (T.null txt)
+        then mc
+        else Just $ case mc of
+            Nothing -> T.maximum txt
+            Just c -> max c (T.maximum txt)
 {-# INLINABLE maximum #-}
 
 -- | Return the minimum 'Char' within a byte stream
 minimum :: (Monad m) => Producer Text m () -> m (Maybe Char)
 minimum = P.fold step Nothing id
   where
-    step mw8 bs =
-        if (T.null bs)
-        then mw8
-        else case mw8 of
-            Nothing -> Just (T.minimum bs)
-            Just w8 -> Just (min w8 (T.minimum bs))
+    step mc txt =
+        if (T.null txt)
+        then mc
+        else case mc of
+            Nothing -> Just (T.minimum txt)
+            Just c -> Just (min c (T.minimum txt))
 {-# INLINABLE minimum #-}
-
--- | Determine whether any element in the byte stream matches the given 'Char'
--- elem :: (Monad m) => Char -> Producer Text m () -> m Bool
--- elem w8 = P.any (T.elem w8)
--- {-# INLINABLE elem #-}
--- 
--- {-| Determine whether all elements in the byte stream do not match the given
---     'Char'
--- -}
--- notElem :: (Monad m) => Char -> Producer Text m () -> m Bool
--- notElem w8 = P.all (T.notElem w8)
--- {-# INLINABLE notElem #-}
 
 -- | Find the first element in the stream that matches the predicate
 find
@@ -576,12 +505,35 @@ index n p = head (p >-> drop n)
 -- findIndex predicate p = P.head (p >-> findIndices predicate)
 -- {-# INLINABLE findIndex #-}
 -- 
--- -- | Store a tally of how many elements match the given 'Char'
--- count :: (Monad m, Num n) => Char -> Producer Text m () -> m n
--- count w8 p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count w8))
--- {-# INLINABLE count #-}
+-- | Store a tally of how many segments match the given 'Text'
+count :: (Monad m, Num n) => Text -> Producer Text m () -> m n
+count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
+{-# INLINABLE count #-}
 
--- | Splits a 'Producer' after the given number of bytes
+#if MIN_VERSION_text(0,11,4)
+-- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded
+-- into a Pipe of Text
+decodeUtf8
+  :: Monad m
+  => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+decodeUtf8 = go TE.streamDecodeUtf8
+  where go dec p = do
+            x <- lift (next p)
+            case x of
+                Left r -> return (return r)
+                Right (chunk, p') -> do
+                    let TE.Some text l dec' = dec chunk
+                    if B.null l
+                      then do
+                          yield text
+                          go dec' p'
+                      else return $ do
+                          yield l
+                          p'
+{-# INLINEABLE decodeUtf8 #-}
+#endif
+
+-- | Splits a 'Producer' after the given number of characters
 splitAt
     :: (Monad m, Integral n)
     => n
@@ -594,19 +546,19 @@ splitAt = go
         x <- lift (next p)
         case x of
             Left   r       -> return (return r)
-            Right (bs, p') -> do
-                let len = fromIntegral (T.length bs)
+            Right (txt, p') -> do
+                let len = fromIntegral (T.length txt)
                 if (len <= n)
                     then do
-                        yield bs
+                        yield txt
                         go (n - len) p'
                     else do
-                        let (prefix, suffix) = T.splitAt (fromIntegral n) bs
+                        let (prefix, suffix) = T.splitAt (fromIntegral n) txt
                         yield prefix
                         return (yield suffix >> p')
 {-# INLINABLE splitAt #-}
 
--- | Split a byte stream into 'FreeT'-delimited byte streams of fixed size
+-- | Split a text stream into 'FreeT'-delimited text streams of fixed size
 chunksOf
     :: (Monad m, Integral n)
     => n -> Producer Text m r -> FreeT (Producer Text m) m r
@@ -616,13 +568,13 @@ chunksOf n p0 = PP.FreeT (go p0)
         x <- next p
         return $ case x of
             Left   r       -> PP.Pure r
-            Right (bs, p') -> PP.Free $ do
-                p'' <- splitAt n (yield bs >> p')
+            Right (txt, p') -> PP.Free $ do
+                p'' <- splitAt n (yield txt >> p')
                 return $ PP.FreeT (go p'')
 {-# INLINABLE chunksOf #-}
 
-{-| Split a byte stream in two, where the first byte stream is the longest
-    consecutive group of bytes that satisfy the predicate
+{-| Split a text stream in two, where the first text stream is the longest
+    consecutive group of text that satisfy the predicate
 -}
 span
     :: (Monad m)
@@ -635,11 +587,11 @@ span predicate = go
         x <- lift (next p)
         case x of
             Left   r       -> return (return r)
-            Right (bs, p') -> do
-                let (prefix, suffix) = T.span predicate bs
+            Right (txt, p') -> do
+                let (prefix, suffix) = T.span predicate txt
                 if (T.null suffix)
                     then do
-                        yield bs
+                        yield txt
                         go p'
                     else do
                         yield prefix
@@ -671,11 +623,11 @@ splitWith predicate p0 = PP.FreeT (go0 p0)
         x <- next p
         case x of
             Left   r       -> return (PP.Pure r)
-            Right (bs, p') ->
-                if (T.null bs)
+            Right (txt, p') ->
+                if (T.null txt)
                 then go0 p'
                 else return $ PP.Free $ do
-                    p'' <- span (not . predicate) (yield bs >> p')
+                    p'' <- span (not . predicate) (yield txt >> p')
                     return $ PP.FreeT (go1 p'')
     go1 p = do
         x <- nextChar p
@@ -686,15 +638,15 @@ splitWith predicate p0 = PP.FreeT (go0 p0)
                     return $ PP.FreeT (go1 p'')
 {-# INLINABLE splitWith #-}
 
--- | Split a byte stream using the given 'Char' as the delimiter
+-- | Split a text stream using the given 'Char' as the delimiter
 split :: (Monad m)
       => Char
       -> Producer Text m r
       -> FreeT (Producer Text m) m r
-split w8 = splitWith (w8 ==)
+split c = splitWith (c ==)
 {-# INLINABLE split #-}
 
-{-| Group a byte stream into 'FreeT'-delimited byte streams using the supplied
+{-| Group a text stream into 'FreeT'-delimited byte streams using the supplied
     equality predicate
 -}
 groupBy
@@ -708,11 +660,11 @@ groupBy equal p0 = PP.FreeT (go p0)
         x <- next p
         case x of
             Left   r       -> return (PP.Pure r)
-            Right (bs, p') -> case (T.uncons bs) of
+            Right (txt, p') -> case (T.uncons txt) of
                 Nothing      -> go p'
-                Just (w8, _) -> do
+                Just (c, _) -> do
                     return $ PP.Free $ do
-                        p'' <- span (equal w8) (yield bs >> p')
+                        p'' <- span (equal c) (yield txt >> p')
                         return $ PP.FreeT (go p'')
 {-# INLINABLE groupBy #-}
 
@@ -736,10 +688,10 @@ lines p0 = PP.FreeT (go0 p0)
         x <- next p
         case x of
             Left   r       -> return (PP.Pure r)
-            Right (bs, p') ->
-                if (T.null bs)
+            Right (txt, p') ->
+                if (T.null txt)
                 then go0 p'
-                else return $ PP.Free $ go1 (yield bs >> p')
+                else return $ PP.Free $ go1 (yield txt >> p')
     go1 p = do
         p' <- break ('\n' ==) p
         return $ PP.FreeT (go2 p')
@@ -749,13 +701,10 @@ lines p0 = PP.FreeT (go0 p0)
             Left   r      -> PP.Pure r
             Right (_, p') -> PP.Free (go1 p')
 {-# INLINABLE lines #-}
-nextChar = undefined
-{-| Split a byte stream into 'FreeT'-delimited words
 
-    Note: This function is purely for demonstration purposes since it assumes a
-    particular encoding.  You should prefer the 'Data.Text.Text' equivalent of
-    this function from the upcoming @pipes-text@ library.
--}
+
+
+-- | Split a text stream into 'FreeT'-delimited words
 words
     :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
 words p0 = removeEmpty (splitWith isSpace p0)
@@ -777,27 +726,27 @@ words p0 = removeEmpty (splitWith isSpace p0)
 -- | Intersperse a 'Char' in between the bytes of the byte stream
 intersperse
     :: (Monad m) => Char -> Producer Text m r -> Producer Text m r
-intersperse w8 = go0
+intersperse c = go0
   where
     go0 p = do
         x <- lift (next p)
         case x of
             Left   r       -> return r
-            Right (bs, p') -> do
-                yield (T.intersperse w8 bs)
+            Right (txt, p') -> do
+                yield (T.intersperse c txt)
                 go1 p'
     go1 p = do
         x <- lift (next p)
         case x of
             Left   r       -> return r
-            Right (bs, p') -> do
-                yield (T.singleton w8)
-                yield (T.intersperse w8 bs)
+            Right (txt, p') -> do
+                yield (T.singleton c)
+                yield (T.intersperse c txt)
                 go1 p'
 {-# INLINABLE intersperse #-}
 
-{-| 'intercalate' concatenates the 'FreeT'-delimited byte streams after
-    interspersing a byte stream in between them
+{-| 'intercalate' concatenates the 'FreeT'-delimited text streams after
+    interspersing a text stream in between them
 -}
 intercalate
     :: (Monad m)
@@ -824,10 +773,6 @@ intercalate p0 = go0
 {-# INLINABLE intercalate #-}
 
 {-| Join 'FreeT'-delimited lines into a byte stream
-
-    Note: This function is purely for demonstration purposes since it assumes a
-    particular encoding.  You should prefer the 'Data.Text.Text' equivalent of
-    this function from the upcoming @pipes-text@ library.
 -}
 unlines
     :: (Monad m) => FreeT (Producer Text m) m r -> Producer Text m r
@@ -843,11 +788,7 @@ unlines = go
                 go f'
 {-# INLINABLE unlines #-}
 
-{-| Join 'FreeT'-delimited words into a byte stream
-
-    Note: This function is purely for demonstration purposes since it assumes a
-    particular encoding.  You should prefer the 'Data.Text.Text' equivalent of
-    this function from the upcoming @pipes-text@ library.
+{-| Join 'FreeT'-delimited words into a text stream
 -}
 unwords
     :: (Monad m) => FreeT (Producer Text m) m r -> Producer Text m r
@@ -855,29 +796,14 @@ unwords = intercalate (yield $ T.pack " ")
 {-# INLINABLE unwords #-}
 
 {- $parse
-    The following parsing utilities are single-byte analogs of the ones found
-    in @pipes-parse@.
+    The following parsing utilities are single-character analogs of the ones found
+    @pipes-parse@.
 -}
-
-{-| Take bytes until they fail the predicate
-
-    Unlike 'takeWhile', this 'PP.unDraw's unused bytes
--}
--- takeWhile'
---     :: (Monad m)
---     => (Char -> Bool)
---     -> Pipe Text Text (StateT (Producer Text m r) m) ()
--- takeWhile' = PBP.takeWhile
--- {-# INLINABLE takeWhile' #-}
--- {-# DEPRECATED takeWhile' "Use Pipes.Text.Parse.takeWhile instead" #-}
 
 {- $reexports
-    "Pipes.Text.Parse" re-exports 'nextByte', 'drawByte', 'unDrawByte',
-    'peekByte', and 'isEndOfBytes'.
+    @Pipes.Text.Parse@ re-exports 'nextChar', 'drawChar', 'unDrawChar', 'peekChar', and 'isEndOfChars'.
     
     @Data.Text@ re-exports the 'Text' type.
-
-    @Data.Word@ re-exports the 'Char' type.
 
     @Pipes.Parse@ re-exports 'input', 'concat', and 'FreeT' (the type).
 -}
