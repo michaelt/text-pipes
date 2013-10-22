@@ -56,7 +56,7 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
     usage.
 -}
 
-module Data.Text.Pipes  (
+module Pipes.Text  (
     -- * Producers
     fromLazy,
     stdin,
@@ -79,6 +79,10 @@ module Data.Text.Pipes  (
     dropWhile,
     filter,
     scan,
+    encodeUtf8,
+    pack,
+    unpack,
+    stripStart,
 
     -- * Folds
     toLazy,
@@ -306,6 +310,49 @@ concatMap
     :: (Monad m) => (Char -> Text) -> Pipe Text Text m r
 concatMap f = P.map (T.concatMap f)
 {-# INLINABLE concatMap #-}
+
+
+-- | Transform a Pipe of 'Text' into a Pipe of 'ByteString's using UTF-8
+-- encoding
+encodeUtf8 :: Monad m => Pipe Text ByteString m r
+encodeUtf8 = P.map TE.encodeUtf8
+{-# INLINEABLE encodeUtf8 #-}
+
+--| Transform a Pipe of 'String's into one of 'Text' chunks
+pack :: Monad m => Pipe String Text m r
+pack = P.map T.pack
+{-# INLINEABLE pack #-}
+
+--| Transforma a Pipes of 'Text' chunks into one of 'String's
+unpack :: Monad m => Pipe Text String m r
+unpack = P.map T.unpack
+{-# INLINEABLE unpack #-}
+
+--| @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utility, 
+-- here acting on a 'Text' pipe, rather as they would  on a lazy text
+toCaseFold :: Monad m => Pipe Text Text m ()
+toCaseFold = P.map T.toCaseFold
+{-# INLINEABLE toCaseFold #-}
+
+--| lowercase incoming 'Text'
+toLower :: Monad m => Pipe Text Text m ()
+toLower = P.map T.toLower
+{-# INLINEABLE toLower #-}
+
+--| uppercase incoming 'Text'
+toUpper :: Monad m => Pipe Text Text m ()
+toUpper = P.map T.toUpper
+{-# INLINEABLE toUpper #-}
+
+--| Remove leading white space from an incoming succession of 'Text's 
+stripStart :: Monad m => Pipe Text Text m r
+stripStart = do
+    chunk <- await
+    let text = T.stripStart chunk
+    if T.null text
+      then stripStart
+      else cat
+{-# INLINEABLE stripStart #-}
 
 -- | @(take n)@ only allows @n@ individual characters to pass; 
 --  contrast @Pipes.Prelude.take@ which would let @n@ chunks pass.

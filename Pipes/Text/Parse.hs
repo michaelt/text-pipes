@@ -1,6 +1,6 @@
 -- | Parsing utilities for characterstrings, in the style of @pipes-parse@
 
-module Data.Text.Pipes.Parse (
+module Pipes.Text.Parse (
     -- * Parsers
     nextChar,
     drawChar,

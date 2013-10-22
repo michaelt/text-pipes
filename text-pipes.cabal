@@ -1,4 +1,4 @@
-name:                text-pipes
+name:                pipes-text
 version:             0.1.0.0
 synopsis:            Text pipes.
 description:         Text pipes.
@@ -12,7 +12,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Data.Text.Pipes, Data.Text.Pipes.Parse
+  exposed-modules:     Pipes.Text, Pipes.Text.Parse
   -- other-modules:       
   other-extensions:    RankNTypes
   build-depends:       base         >= 4       && < 5  ,
