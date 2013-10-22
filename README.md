@@ -1,11 +1,8 @@
-text-pipes
+pipes-text
 ==========
 
-Text pipes, somehow to be fused with [`pipes-text`](https://github.com/ibotty/pipes-text) 
-which uses an upcoming version of the `text` library to link bytestring and text.
-
-This module follows the pattern of `pipes-bytestring` (largely by skillful use of the
-expedient of regular expressions), and adds a few `pipes-prelude`-like operations.
+These modules `Pipes.Text` and `Pipes.Text.Parse` use materials from [`pipes-text`](https://github.com/ibotty/pipes-text) and 
+otherwise follows the pattern of [`pipes-bytestring`](https://github.com/Gabriel439/Haskell-Pipes-ByteString-Library), adding a few `pipes-prelude`-like operations.
 
 
      >>> runEffect $ stdinLn >-> P.takeWhile (/= "quit") >-> stdoutLn
@@ -13,7 +10,6 @@ expedient of regular expressions), and adds a few `pipes-prelude`-like operation
      hi
      quit<Return>
      >>> runSafeT $ runEffect $ readFile "README.md" >-> map toUpper >-> hoist lift stdout
-     TEXT-PIPES
+     PIPES-TEXT
      ==========
-     TEXT PIPES, SOMEHOW TO BE FUSED WITH `PIPES-TEXT`.
      ...

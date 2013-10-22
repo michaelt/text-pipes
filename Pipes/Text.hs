@@ -158,7 +158,7 @@ import Foreign.C.Error (Errno(Errno), ePIPE)
 import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString.Parse as PBP
-import Data.Text.Pipes.Parse (
+import Pipes.Text.Parse (
     nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
 import Pipes.Core (respond, Server')
 import qualified Pipes.Parse as PP
@@ -318,33 +318,33 @@ encodeUtf8 :: Monad m => Pipe Text ByteString m r
 encodeUtf8 = P.map TE.encodeUtf8
 {-# INLINEABLE encodeUtf8 #-}
 
---| Transform a Pipe of 'String's into one of 'Text' chunks
+-- | Transform a Pipe of 'String's into one of 'Text' chunks
 pack :: Monad m => Pipe String Text m r
 pack = P.map T.pack
 {-# INLINEABLE pack #-}
 
---| Transforma a Pipes of 'Text' chunks into one of 'String's
+-- | Transforma a Pipes of 'Text' chunks into one of 'String's
 unpack :: Monad m => Pipe Text String m r
 unpack = P.map T.unpack
 {-# INLINEABLE unpack #-}
 
---| @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utility, 
+-- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utility, 
 -- here acting on a 'Text' pipe, rather as they would  on a lazy text
 toCaseFold :: Monad m => Pipe Text Text m ()
 toCaseFold = P.map T.toCaseFold
 {-# INLINEABLE toCaseFold #-}
 
---| lowercase incoming 'Text'
+-- | lowercase incoming 'Text'
 toLower :: Monad m => Pipe Text Text m ()
 toLower = P.map T.toLower
 {-# INLINEABLE toLower #-}
 
---| uppercase incoming 'Text'
+-- | uppercase incoming 'Text'
 toUpper :: Monad m => Pipe Text Text m ()
 toUpper = P.map T.toUpper
 {-# INLINEABLE toUpper #-}
 
---| Remove leading white space from an incoming succession of 'Text's 
+-- | Remove leading white space from an incoming succession of 'Text's 
 stripStart :: Monad m => Pipe Text Text m r
 stripStart = do
     chunk <- await
