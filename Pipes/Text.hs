@@ -82,6 +82,9 @@ module Pipes.Text  (
     encodeUtf8,
     pack,
     unpack,
+    toCaseFold,
+    toLower,
+    toUpper,
     stripStart,
 
     -- * Folds

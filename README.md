@@ -11,7 +11,7 @@ though `decodeUtf8` will then not exist.
      hi<Return>
      hi
      quit<Return>
-     >>> runSafeT $ runEffect $ readFile "README.md" >-> map toUpper >-> hoist lift stdout
+     >>> runSafeT $ runEffect $ readFile "README.md" >-> toUpper >-> hoist lift stdout
      TEXT-PIPES
      ==========
      ...
