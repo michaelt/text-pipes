@@ -11,6 +11,6 @@ The most important function, `decodeUtf8`, written by ibotty, uses the developme
      hi
      quit<Return>
      >>> runSafeT $ runEffect $ readFile "README.md" >-> map toUpper >-> hoist lift stdout
-     PIPES-TEXT
+     TEXT-PIPES
      ==========
      ...
