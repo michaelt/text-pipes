@@ -203,7 +203,7 @@ fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
 fromLazy  = foldrChunks (\e a -> yield e >> a) (return ()) 
 {-# INLINABLE fromLazy #-}
 
--- | Stream bytes from 'stdin'
+-- | Stream text from 'stdin'
 stdin :: MonadIO m => Producer' Text m ()
 stdin = fromHandle IO.stdin
 {-# INLINABLE stdin #-}
@@ -486,7 +486,7 @@ null :: (Monad m) => Producer Text m () -> m Bool
 null = P.all T.null
 {-# INLINABLE null #-}
 
--- | Count the number of bytes
+-- | Count the number of characters in the stream
 length :: (Monad m, Num n) => Producer Text m () -> m n
 length = P.fold (\n txt -> n + fromIntegral (T.length txt)) 0 id
 {-# INLINABLE length #-}
@@ -501,7 +501,7 @@ all :: (Monad m) => (Char -> Bool) -> Producer Text m () -> m Bool
 all predicate = P.all (T.all predicate)
 {-# INLINABLE all #-}
 
--- | Return the maximum 'Char' within a byte stream
+-- | Return the maximum 'Char' within a text stream
 maximum :: (Monad m) => Producer Text m () -> m (Maybe Char)
 maximum = P.fold step Nothing id
   where
@@ -513,7 +513,7 @@ maximum = P.fold step Nothing id
             Just c -> max c (T.maximum txt)
 {-# INLINABLE maximum #-}
 
--- | Return the minimum 'Char' within a byte stream
+-- | Return the minimum 'Char' within a text stream (surely very useful!)
 minimum :: (Monad m) => Producer Text m () -> m (Maybe Char)
 minimum = P.fold step Nothing id
   where
@@ -532,7 +532,7 @@ find
 find predicate p = head (p >-> filter predicate)
 {-# INLINABLE find #-}
 
--- | Index into a byte stream
+-- | Index into a text stream
 index
     :: (Monad m, Integral a)
     => a-> Producer Text m () -> m (Maybe Char)
@@ -645,8 +645,8 @@ span predicate = go
                         return (yield suffix >> p')
 {-# INLINABLE span #-}
 
-{-| Split a byte stream in two, where the first byte stream is the longest
-    consecutive group of bytes that don't satisfy the predicate
+{-| Split a text stream in two, where the first text stream is the longest
+    consecutive group of characters that don't satisfy the predicate
 -}
 break
     :: (Monad m)
@@ -656,7 +656,7 @@ break
 break predicate = span (not . predicate)
 {-# INLINABLE break #-}
 
-{-| Split a byte stream into sub-streams delimited by bytes that satisfy the
+{-| Split a text stream into sub-streams delimited by characters that satisfy the
     predicate
 -}
 splitWith
@@ -693,7 +693,7 @@ split :: (Monad m)
 split c = splitWith (c ==)
 {-# INLINABLE split #-}
 
-{-| Group a text stream into 'FreeT'-delimited byte streams using the supplied
+{-| Group a text stream into 'FreeT'-delimited text streams using the supplied
     equality predicate
 -}
 groupBy
@@ -715,17 +715,13 @@ groupBy equal p0 = PP.FreeT (go p0)
                         return $ PP.FreeT (go p'')
 {-# INLINABLE groupBy #-}
 
--- | Group a byte stream into 'FreeT'-delimited byte streams of identical bytes
+-- | Group a text stream into 'FreeT'-delimited text streams of identical characters
 group
     :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
 group = groupBy (==)
 {-# INLINABLE group #-}
 
-{-| Split a byte stream into 'FreeT'-delimited lines
-
-    Note: This function is purely for demonstration purposes since it assumes a
-    particular encoding.  You should prefer the 'Data.Text.Text' equivalent of
-    this function from the upcoming @pipes-text@ library.
+{-| Split a text stream into 'FreeT'-delimited lines
 -}
 lines
     :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
@@ -770,7 +766,7 @@ words p0 = removeEmpty (splitWith isSpace p0)
                         return (removeEmpty f')
 {-# INLINABLE words #-}
 
--- | Intersperse a 'Char' in between the bytes of the byte stream
+-- | Intersperse a 'Char' in between the characters of the text stream
 intersperse
     :: (Monad m) => Char -> Producer Text m r -> Producer Text m r
 intersperse c = go0
@@ -819,7 +815,7 @@ intercalate p0 = go0
                 go1 f'
 {-# INLINABLE intercalate #-}
 
-{-| Join 'FreeT'-delimited lines into a byte stream
+{-| Join 'FreeT'-delimited lines into a text stream
 -}
 unlines
     :: (Monad m) => FreeT (Producer Text m) m r -> Producer Text m r

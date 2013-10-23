@@ -1,4 +1,4 @@
--- | Parsing utilities for characterstrings, in the style of @pipes-parse@
+-- | Parsing utilities for texts, in the style of @pipes-parse@ and @Pipes.ByteString.Parse@
 
 module Pipes.Text.Parse (
     -- * Parsers
@@ -23,7 +23,7 @@ import Prelude hiding (take, takeWhile)
 {-| Consume the first character from a 'Text' stream
 
     'next' either fails with a 'Left' if the 'Producer' has no more characters or
-    succeeds with a 'Right' providing the next byte and the remainder of the
+    succeeds with a 'Right' providing the next character and the remainder of the
     'Producer'.
 -}
 nextChar
