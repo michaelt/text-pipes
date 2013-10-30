@@ -143,7 +143,7 @@ module Pipes.Text  (
 
 import Control.Exception (throwIO, try)
 import Control.Monad (liftM, unless)
-import Control.Monad.Trans.State.Strict (StateT)
+import Control.Monad.Trans.State.Strict (StateT(..))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as TE
@@ -755,18 +755,22 @@ words
     :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
 words p0 = removeEmpty (splitWith isSpace p0)
   where
-    removeEmpty f = PP.FreeT $ do
-        x <- PP.runFreeT f
-        case x of
-            PP.Pure r -> return (PP.Pure r)
-            PP.Free p -> do
-                y <- next p
-                case y of
-                    Left   f'      -> PP.runFreeT (removeEmpty f')
-                    Right (bs, p') -> return $ PP.Free $ do
-                        yield bs
-                        f' <- p'
-                        return (removeEmpty f')
+  removeEmpty f = PP.FreeT $ do
+    x <- PP.runFreeT f
+    case x of 
+        PP.Pure r -> return (PP.Pure r)
+        PP.Free p -> loop p
+  loop p = do 
+    y <- next p
+    case y of
+        Left   f'       -> PP.runFreeT (removeEmpty f')
+        Right (txt, p') -> 
+          if T.null txt 
+             then loop p'
+             else return $ PP.Free $ do
+                            yield txt
+                            f' <- p'
+                            return (removeEmpty f')
 {-# INLINABLE words #-}
 
 -- | Intersperse a 'Char' in between the characters of the text stream
