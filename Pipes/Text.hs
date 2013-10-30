@@ -2,9 +2,10 @@
 
 {-| This module provides @pipes@ utilities for \"text streams\", which are
     streams of 'Text' chunks.  The individual chunks are uniformly @strict@, but 
-    can interact lazy 'Text's  and 'IO.Handle's.
+    a 'Producer' can be converted to and from lazy 'Text's; an 'IO.Handle' can
+    be associated with a 'Producer' or 'Consumer' according as it is read or written to.
 
-    To stream to or from 'IO.Handle's, use 'fromHandle' or 'toHandle'.  For
+    To stream to or from 'IO.Handle's, one can use 'fromHandle' or 'toHandle'.  For
     example, the following program copies a document from one file to another:
 
 > import Pipes
@@ -101,8 +102,6 @@ module Pipes.Text  (
     minimum,
     find,
     index,
---    elemIndex,
---    findIndex,
     count,
 
     -- * Splitters
@@ -118,6 +117,7 @@ module Pipes.Text  (
     words,
 #if MIN_VERSION_text(0,11,4)
     decodeUtf8,
+    decodeUtf8With,
 #endif
     -- * Transformations
     intersperse,
@@ -147,6 +147,7 @@ import Control.Monad.Trans.State.Strict (StateT(..))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as TE
+import qualified Data.Text.Encoding.Error as TE
 import Data.Text (Text)
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.IO as TL
@@ -172,6 +173,7 @@ import Pipes.Safe (MonadSafe(..), Base(..))
 import qualified Pipes.Prelude as P
 import qualified System.IO as IO
 import Data.Char (isSpace)
+import Data.Word (Word8)
 import Prelude hiding (
     all,
     any,
@@ -542,19 +544,7 @@ index
 index n p = head (p >-> drop n)
 {-# INLINABLE index #-}
 
--- | Find the index of an element that matches the given 'Char'
--- elemIndex
---     :: (Monad m, Num n) => Char -> Producer Text m () -> m (Maybe n)
--- elemIndex w8 = findIndex (w8 ==)
--- {-# INLINABLE elemIndex #-}
 
--- | Store the first index of an element that satisfies the predicate
--- findIndex
---     :: (Monad m, Num n)
---     => (Char -> Bool) -> Producer Text m () -> m (Maybe n)
--- findIndex predicate p = P.head (p >-> findIndices predicate)
--- {-# INLINABLE findIndex #-}
--- 
 -- | Store a tally of how many segments match the given 'Text'
 count :: (Monad m, Num n) => Text -> Producer Text m () -> m n
 count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
@@ -581,6 +571,29 @@ decodeUtf8 = go TE.streamDecodeUtf8
                           yield l
                           p'
 {-# INLINEABLE decodeUtf8 #-}
+
+-- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded
+-- into a Pipe of Text with a replacement function of type @String -> Maybe Word8 -> Maybe Char@
+-- E.g. 'Data.Text.Encoding.Error.lenientDecode', which simply replaces bad bytes with \"�\"
+decodeUtf8With 
+  :: Monad m  
+  => TE.OnDecodeError 
+  -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+decodeUtf8With onErr = go (TE.streamDecodeUtf8With onErr)
+  where go dec p = do
+            x <- lift (next p)
+            case x of
+                Left r -> return (return r)
+                Right (chunk, p') -> do
+                    let TE.Some text l dec' = dec chunk
+                    if B.null l
+                      then do
+                          yield text
+                          go dec' p'
+                      else return $ do
+                          yield l
+                          p'
+{-# INLINEABLE decodeUtf8With #-}
 #endif
 
 -- | Splits a 'Producer' after the given number of characters
