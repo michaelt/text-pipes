@@ -81,6 +81,10 @@ module Pipes.Text  (
     filter,
     scan,
     encodeUtf8,
+#if MIN_VERSION_text(0,11,4)
+    pipeDecodeUtf8,
+    pipeDecodeUtf8With,
+#endif
     pack,
     unpack,
     toCaseFold,
@@ -318,7 +322,8 @@ concatMap f = P.map (T.concatMap f)
 
 
 -- | Transform a Pipe of 'Text' into a Pipe of 'ByteString's using UTF-8
--- encoding
+-- encoding; @encodeUtf8 = Pipes.Prelude.map TE.encodeUtf8@ so more complex
+-- encoding pipes can easily be constructed with the functions in @Data.Text.Encoding@
 encodeUtf8 :: Monad m => Pipe Text ByteString m r
 encodeUtf8 = P.map TE.encodeUtf8
 {-# INLINEABLE encodeUtf8 #-}
@@ -594,6 +599,29 @@ decodeUtf8With onErr = go (TE.streamDecodeUtf8With onErr)
                           yield l
                           p'
 {-# INLINEABLE decodeUtf8With #-}
+
+-- | A simple pipe from 'ByteString' to 'Text'; a decoding error will arise
+-- with any chunk that contains a sequence of bytes that is unreadable. Otherwise
+-- only few bytes will only be moved from one chunk to the next before decoding.
+pipeDecodeUtf8 :: Monad m => Pipe ByteString Text m r
+pipeDecodeUtf8 = go TE.streamDecodeUtf8
+  where go dec = do chunk <- await
+                    case dec chunk of 
+                      TE.Some text l dec' -> do yield text
+                                                go dec'
+{-# INLINEABLE pipeDecodeUtf8 #-}
+
+-- | A simple pipe from 'ByteString' to 'Text' using a replacement function.
+pipeDecodeUtf8With 
+  :: Monad m  
+  => TE.OnDecodeError 
+  -> Pipe ByteString Text m r 
+pipeDecodeUtf8With onErr = go (TE.streamDecodeUtf8With onErr)
+  where go dec = do chunk <- await
+                    case dec chunk of 
+                      TE.Some text l dec' -> do yield text
+                                                go dec'
+{-# INLINEABLE pipeDecodeUtf8With #-}
 #endif
 
 -- | Splits a 'Producer' after the given number of characters
