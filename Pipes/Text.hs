@@ -159,7 +159,7 @@ import Data.Text.Lazy.Internal (foldrChunks, defaultChunkSize)
 import Data.ByteString.Unsafe (unsafeTake, unsafeDrop)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Data.Char (ord)
+import Data.Char (ord, isSpace)
 import Data.Functor.Identity (Identity)
 import qualified Data.List as List
 import Foreign.C.Error (Errno(Errno), ePIPE)
@@ -794,25 +794,17 @@ lines p0 = PP.FreeT (go0 p0)
 -- | Split a text stream into 'FreeT'-delimited words
 words
     :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
-words p0 = removeEmpty (splitWith isSpace p0)
+words = go
   where
-  removeEmpty f = PP.FreeT $ do
-    x <- PP.runFreeT f
-    case x of 
-        PP.Pure r -> return (PP.Pure r)
-        PP.Free p -> loop p
-  loop p = do 
-    y <- next p
-    case y of
-        Left   f'       -> PP.runFreeT (removeEmpty f')
-        Right (txt, p') -> 
-          if T.null txt 
-             then loop p'
-             else return $ PP.Free $ do
-                            yield txt
-                            f' <- p'
-                            return (removeEmpty f')
+    go p = PP.FreeT $ do
+        x <- next (p >-> dropWhile isSpace)
+        return $ case x of
+            Left   r       -> PP.Pure r
+            Right (bs, p') -> PP.Free $ do
+                p'' <- break isSpace (yield bs >> p')
+                return (go p'')
 {-# INLINABLE words #-}
+
 
 -- | Intersperse a 'Char' in between the characters of the text stream
 intersperse
