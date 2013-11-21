@@ -305,6 +305,11 @@ toHandle :: MonadIO m => IO.Handle -> Consumer' Text m r
 toHandle h = for cat (liftIO . T.hPutStr h)
 {-# INLINABLE toHandle #-}
 
+{-# RULES "p >-> toHandle h" forall p h .
+        p >-> toHandle h = for p (\bs -> liftIO (T.hPutStr h bs))
+  #-}
+
+
 -- | Stream text into a file. Uses @pipes-safe@.
 writeFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Consumer' Text m ()
 writeFile file = Safe.withFile file IO.WriteMode toHandle
@@ -335,8 +340,9 @@ pack = P.map T.pack
 
 -- | Transforma a Pipes of 'Text' chunks into one of 'String's
 unpack :: Monad m => Pipe Text String m r
-unpack = P.map T.unpack
+unpack = for cat (\t -> yield (T.unpack t))
 {-# INLINEABLE unpack #-}
+
 
 -- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utility, 
 -- here acting on a 'Text' pipe, rather as they would  on a lazy text
