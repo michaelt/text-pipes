@@ -306,7 +306,7 @@ toHandle h = for cat (liftIO . T.hPutStr h)
 {-# INLINABLE toHandle #-}
 
 {-# RULES "p >-> toHandle h" forall p h .
-        p >-> toHandle h = for p (\bs -> liftIO (T.hPutStr h bs))
+        p >-> toHandle h = for p (\txt -> liftIO (T.hPutStr h txt))
   #-}
 
 
@@ -319,12 +319,19 @@ map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
 map f = P.map (T.map f)
 {-# INLINABLE map #-}
 
+{-# RULES "p >-> map f" forall p f .
+        p >-> map f = for p (\txt -> yield (T.map f txt))
+  #-}
+
 -- | Map a function over the characters of a text stream and concatenate the results
 concatMap
     :: (Monad m) => (Char -> Text) -> Pipe Text Text m r
 concatMap f = P.map (T.concatMap f)
 {-# INLINABLE concatMap #-}
 
+{-# RULES "p >-> concatMap f" forall p f .
+        p >-> concatMap f = for p (\txt -> yield (T.concatMap f txt))
+  #-}
 
 -- | Transform a Pipe of 'Text' into a Pipe of 'ByteString's using UTF-8
 -- encoding; @encodeUtf8 = Pipes.Prelude.map TE.encodeUtf8@ so more complex
@@ -333,16 +340,27 @@ encodeUtf8 :: Monad m => Pipe Text ByteString m r
 encodeUtf8 = P.map TE.encodeUtf8
 {-# INLINEABLE encodeUtf8 #-}
 
+{-# RULES "p >-> encodeUtf8" forall p .
+        p >-> encodeUtf8 = for p (\txt -> yield (TE.encodeUtf8 txt))
+  #-}
+
 -- | Transform a Pipe of 'String's into one of 'Text' chunks
 pack :: Monad m => Pipe String Text m r
 pack = P.map T.pack
 {-# INLINEABLE pack #-}
 
--- | Transforma a Pipes of 'Text' chunks into one of 'String's
+{-# RULES "p >-> pack" forall p .
+        p >-> pack = for p (\txt -> yield (T.pack txt))
+  #-}
+
+-- | Transform a Pipes of 'Text' chunks into one of 'String's
 unpack :: Monad m => Pipe Text String m r
 unpack = for cat (\t -> yield (T.unpack t))
 {-# INLINEABLE unpack #-}
 
+{-# RULES "p >-> unpack" forall p .
+        p >-> unpack = for p (\txt -> yield (T.unpack txt))
+  #-}
 
 -- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utility, 
 -- here acting on a 'Text' pipe, rather as they would  on a lazy text
@@ -350,15 +368,28 @@ toCaseFold :: Monad m => Pipe Text Text m ()
 toCaseFold = P.map T.toCaseFold
 {-# INLINEABLE toCaseFold #-}
 
+{-# RULES "p >-> toCaseFold" forall p .
+        p >-> toCaseFold = for p (\txt -> yield (T.toCaseFold txt))
+  #-}
+
+
 -- | lowercase incoming 'Text'
 toLower :: Monad m => Pipe Text Text m ()
 toLower = P.map T.toLower
 {-# INLINEABLE toLower #-}
 
+{-# RULES "p >-> toLower" forall p .
+        p >-> toLower = for p (\txt -> yield (T.toLower txt))
+  #-}
+
 -- | uppercase incoming 'Text'
 toUpper :: Monad m => Pipe Text Text m ()
 toUpper = P.map T.toUpper
 {-# INLINEABLE toUpper #-}
+
+{-# RULES "p >-> toUpper" forall p .
+        p >-> toUpper = for p (\txt -> yield (T.toUpper txt))
+  #-}
 
 -- | Remove leading white space from an incoming succession of 'Text's 
 stripStart :: Monad m => Pipe Text Text m r
@@ -432,7 +463,10 @@ filter :: (Monad m) => (Char -> Bool) -> Pipe Text Text m r
 filter predicate = P.map (T.filter predicate)
 {-# INLINABLE filter #-}
 
-
+{-# RULES "p >-> filter q" forall p q .
+        p >-> filter q = for p (\txt -> yield (T.filter q txt))
+  #-}
+  
 -- | Strict left scan over the characters
 scan
     :: (Monad m)
