@@ -225,14 +225,18 @@ stdin = fromHandle IO.stdin
 
 fromHandle :: MonadIO m => IO.Handle -> Producer' Text m ()
 #if MIN_VERSION_text(0,11,4)
-fromHandle h = PB.fromHandle h >-> pipeDecodeUtf8
-{-# INLINABLE fromHandle#-}
+fromHandle h = go TE.streamDecodeUtf8 where
+  act = B.hGetSome h defaultChunkSize
+  go dec = do chunk <- liftIO act
+              case dec chunk of 
+                TE.Some text _ dec' -> do yield text
+                                          unless (B.null chunk) (go dec')
+{-# INLINE fromHandle#-}
 -- bytestring fromHandle + streamDecodeUtf8 is 3 times as fast as
 -- the dedicated Text IO function 'hGetChunk' ;
 -- this way "runEffect $ PT.fromHandle hIn  >->  PT.toHandle hOut"
 -- runs the same as the conduit equivalent, only slightly slower 
 -- than "runEffect $ PB.fromHandle hIn  >->  PB.toHandle hOut"
-
 #else
 fromHandle h = go where
     go = do txt <- liftIO (T.hGetChunk h)
