@@ -165,6 +165,7 @@ import qualified Data.List as List
 import Foreign.C.Error (Errno(Errno), ePIPE)
 import qualified GHC.IO.Exception as G
 import Pipes
+import qualified Pipes.ByteString as PB
 import qualified Pipes.ByteString.Parse as PBP
 import Pipes.Text.Parse (
     nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
@@ -223,12 +224,22 @@ stdin = fromHandle IO.stdin
 -}
 
 fromHandle :: MonadIO m => IO.Handle -> Producer' Text m ()
+#if MIN_VERSION_text(0,11,4)
+fromHandle h = PB.fromHandle h >-> pipeDecodeUtf8
+{-# INLINABLE fromHandle#-}
+-- bytestring fromHandle + streamDecodeUtf8 is 3 times as fast as
+-- the dedicated Text IO function 'hGetChunk' ;
+-- this way "runEffect $ PT.fromHandle hIn  >->  PT.toHandle hOut"
+-- runs the same as the conduit equivalent, only slightly slower 
+-- than "runEffect $ PB.fromHandle hIn  >->  PB.toHandle hOut"
+
+#else
 fromHandle h = go where
     go = do txt <- liftIO (T.hGetChunk h)
             unless (T.null txt) $ do yield txt
                                      go
 {-# INLINABLE fromHandle#-}
-
+#endif
 {-| Stream text from a file using Pipes.Safe
 
 >>> runSafeT $ runEffect $ Text.readFile "hello.hs" >-> Text.map toUpper >-> hoist lift Text.stdout
