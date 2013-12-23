@@ -12,7 +12,9 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Pipes.Text, Pipes.Text.Parse
+  c-sources:    cbits/cbits.c
+  include-dirs: include
+  exposed-modules:     Pipes.Text, Pipes.Text.Parse, Pipes.Text.Internal
   -- other-modules:       
   other-extensions:    RankNTypes
   build-depends:       base         >= 4       && < 5  ,
