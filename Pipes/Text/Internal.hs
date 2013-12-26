@@ -1,11 +1,10 @@
 {-# LANGUAGE BangPatterns, CPP, ForeignFunctionInterface, GeneralizedNewtypeDeriving, MagicHash,
     UnliftedFFITypes #-}
--- This module lifts material from Brian O'Sullivan's text package 
+-- This module lifts assorted materials from Brian O'Sullivan's text package 
 -- especially Data.Text.Encoding in order to define a pipes-appropriate
 -- streamDecodeUtf8
 module Pipes.Text.Internal 
     ( Decoding(..)
-    , streamDecodeUtf8With
     , streamDecodeUtf8
     ) where
 
@@ -20,6 +19,7 @@ import Data.Bits ((.&.))
 import Data.ByteString as B
 import Data.ByteString.Internal as B
 import Data.Text ()
+import qualified Data.Text as T
 import Data.Text.Encoding.Error (OnDecodeError, UnicodeException, strictDecode)
 import Data.Text.Internal (Text(..), safe, textP)
 import Data.Word (Word8, Word32)
@@ -56,94 +56,52 @@ instance Show Decoding where
 newtype CodePoint = CodePoint Word32 deriving (Eq, Show, Num, Storable)
 newtype DecoderState = DecoderState Word32 deriving (Eq, Show, Num, Storable)
 
--- | Decode, in a stream oriented way, a 'ByteString' containing UTF-8
--- encoded text that is known to be valid.
---
--- If the input contains any invalid UTF-8 data, an exception will be
--- thrown (either by this function or a continuation) that cannot be
--- caught in pure code.  For more control over the handling of invalid
--- data, use 'streamDecodeUtf8With'.
 streamDecodeUtf8 :: ByteString -> Decoding
-streamDecodeUtf8 = streamDecodeUtf8With (Just strictDecode)
+streamDecodeUtf8 = decodeChunk B.empty 0 0
 
--- | Decode, in a stream oriented way, a 'ByteString' containing UTF-8
--- encoded text.
-streamDecodeUtf8With :: Maybe OnDecodeError -> ByteString -> Decoding
-streamDecodeUtf8With mErr = case mErr of 
-    Nothing    -> decodeWith False strictDecode 
-    Just onErr -> decodeWith True onErr 
- where
-  -- We create a slightly larger than necessary buffer to accommodate a
-  -- potential surrogate pair started in the last buffer
- decodeWith replace onErr = decodeChunk 0 0
-  where
-  decodeChunk :: CodePoint -> DecoderState -> ByteString -> Decoding
-  decodeChunk codepoint0 state0 bs@(PS fp off len) =
-    runST $ (unsafeIOToST . decodeChunkToBuffer) =<< A.new (len+1)
+decodeChunk :: ByteString -> CodePoint -> DecoderState -> ByteString -> Decoding
+decodeChunk old codepoint0 state0 bs@(PS fp off len) = 
+                  runST $ do marray <- A.new (len+1) 
+                             unsafeIOToST (decodeChunkToBuffer marray)
    where
-    decodeChunkToBuffer :: A.MArray s -> IO Decoding
-    decodeChunkToBuffer dest = withForeignPtr fp $ \ptr ->
-      with (0::CSize) $ \destOffPtr ->
-      with codepoint0 $ \codepointPtr ->
-      with state0 $ \statePtr ->
-      with nullPtr $ \curPtrPtr ->
-        let end = ptr `plusPtr` (off + len)
-            loop curPtr = do
-              poke curPtrPtr curPtr
-              curPtr' <- c_decode_utf8_with_state (A.maBA dest) destOffPtr
-                         curPtrPtr end codepointPtr statePtr
-              state <- peek statePtr
-              case state of
-                UTF8_REJECT ->  
-                  -- We encountered an encoding error
-                 if replace 
-                 then do 
-                  x <- peek curPtr'
-                  case onErr desc (Just x) of
-                    Nothing -> loop $ curPtr' `plusPtr` 1
-                    Just c -> do
-                      destOff <- peek destOffPtr
-                      w <- unsafeSTToIO $
-                           unsafeWrite dest (fromIntegral destOff) (safe c)
-                      poke destOffPtr (destOff + fromIntegral w)
-                      poke statePtr 0
-                      loop $ curPtr' `plusPtr` 1
-                 else do 
-                  n <- peek destOffPtr 
-                  chunkText <- unsafeSTToIO $ do
-                      arr <- A.unsafeFreeze dest
-                      return $! textP arr 0 (fromIntegral n)
-                  lastPtr <- peek curPtrPtr
-                  let left = lastPtr `minusPtr` curPtr
-                  return $ Other chunkText (B.drop left bs)
-                _ -> do
-                  -- We encountered the end of the buffer while decoding
-                  n <- peek destOffPtr
-                  codepoint <- peek codepointPtr
-                  chunkText <- unsafeSTToIO $ do
-                      arr <- A.unsafeFreeze dest
-                      return $! textP arr 0 (fromIntegral n)
-                  lastPtr <- peek curPtrPtr
-                  let left = lastPtr `minusPtr` curPtr
-                  return $ Some chunkText (B.drop left bs)
-                           (decodeChunk codepoint state)
-        in loop (ptr `plusPtr` off)
-  desc = "Data.Text.Encoding.streamDecodeUtf8With: Invalid UTF-8 stream"
+   decodeChunkToBuffer :: A.MArray s -> IO Decoding
+   decodeChunkToBuffer dest = withForeignPtr fp $ \ptr ->
+     with (0::CSize) $ \destOffPtr ->
+     with codepoint0 $ \codepointPtr ->
+     with state0     $ \statePtr ->
+     with nullPtr    $ \curPtrPtr ->
+       do let end = ptr `plusPtr` (off + len)
+              curPtr = ptr `plusPtr` off
+          poke curPtrPtr curPtr
+          c_decode_utf8_with_state (A.maBA dest) destOffPtr curPtrPtr end codepointPtr statePtr
+          state <- peek statePtr
+          lastPtr <- peek curPtrPtr
+          codepoint <- peek codepointPtr
+          n <- peek destOffPtr
+          chunkText <- mkText dest n
+          let left      = lastPtr `minusPtr` curPtr
+              remaining = B.drop left bs
+              accum = if T.null chunkText then B.append old remaining  else remaining 
+          return $ case state of 
+            UTF8_REJECT -> Other chunkText accum -- We encountered an encoding error
+            _ ->           Some  chunkText accum (decodeChunk accum codepoint state)
+
+
+mkText :: A.MArray s -> CSize -> IO Text
+mkText dest n =  unsafeSTToIO $ do arr <- A.unsafeFreeze dest
+                                   return $! textP arr 0 (fromIntegral n)
 
 ord :: Char -> Int
 ord (C# c#) = I# (ord# c#)
 {-# INLINE ord #-}
 
-
 unsafeWrite :: A.MArray s -> Int -> Char -> ST s Int
 unsafeWrite marr i c
-    | n < 0x10000 = do 
-        A.unsafeWrite marr i (fromIntegral n)
-        return 1
-    | otherwise = do
-        A.unsafeWrite marr i lo
-        A.unsafeWrite marr (i+1) hi
-        return 2
+    | n < 0x10000 = do A.unsafeWrite marr i (fromIntegral n)
+                       return 1
+    | otherwise   = do A.unsafeWrite marr i lo
+                       A.unsafeWrite marr (i+1) hi
+                       return 2
     where n = ord c
           m = n - 0x10000
           lo = fromIntegral $ (m `shiftR` 10) + 0xD800

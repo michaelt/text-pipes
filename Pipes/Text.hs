@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeFamilies, CPP #-}
+{-# LANGUAGE RankNTypes, TypeFamilies, NoMonomorphismRestriction #-}
 
 {-| This module provides @pipes@ utilities for \"text streams\", which are
     streams of 'Text' chunks.  The individual chunks are uniformly @strict@, but 
@@ -116,7 +116,6 @@ module Pipes.Text  (
     lines,
     words,
     decodeUtf8,
-    decodeUtf8With,
     -- * Transformations
     intersperse,
     
@@ -209,7 +208,7 @@ fromLazy  = foldrChunks (\e a -> yield e >> a) (return ())
 {-# INLINABLE fromLazy #-}
 
 -- | Stream text from 'stdin'
-stdin :: MonadIO m => Producer' Text m (Producer ByteString m ())
+stdin :: MonadIO m => Producer Text m (Producer ByteString m ())
 stdin = fromHandle IO.stdin
 {-# INLINABLE stdin #-}
 
@@ -217,52 +216,17 @@ stdin = fromHandle IO.stdin
     determined by the good sense of the text library. 
 -}
 
-fromHandle :: MonadIO m => IO.Handle -> Producer' Text m (Producer ByteString m ())
--- TODO: this should perhaps just be `decodeUtf8 (PB.fromHandle h)`
--- if only so that mistakes can be concentrated in one place.
--- This modifies something that was faster on an earlier iteration.
--- Note also that the `text` replacement system is being ignored;
--- with a replacement scheme one could have `Producer Text m ()`
--- the relation to the replacement business needs to be thought out.
--- The complicated type seems overmuch for the toy stdin above
-fromHandle h = go PE.streamDecodeUtf8 B.empty where
-  act = B.hGetSome h defaultChunkSize
-  go dec old = do chunk <- liftIO act
-                  if B.null chunk 
-                    then if B.null old then return (return ())
-                                       else return (yield old >> return ())
-                    else case dec chunk of 
-                           PE.Some text bs dec' -> 
-                              if T.null text then go dec' (B.append old bs) 
-                                             else do yield text
-                                                     go dec' B.empty
-                           PE.Other text bs ->
-                              if T.null text then return (do yield old
-                                                             yield bs
-                                                             PB.fromHandle h)
-                                             else do yield text
-                                                     return (do yield bs
-                                                                PB.fromHandle h)
+fromHandle :: MonadIO m => IO.Handle -> Producer Text m (Producer ByteString m ())
+fromHandle h = decodeUtf8 (PB.fromHandle h)
 {-# INLINE fromHandle#-}
--- bytestring fromHandle + streamDecodeUtf8 is 3 times as fast as
--- the dedicated Text IO function 'hGetChunk' ;
--- this way "runEffect $ PT.fromHandle hIn  >->  PT.toHandle hOut"
--- runs the same as the conduit equivalent, only slightly slower 
--- than "runEffect $ PB.fromHandle hIn  >->  PB.toHandle hOut"
--- #else
--- fromHandle h = go where
---     go = do txt <- liftIO (T.hGetChunk h)
---             unless (T.null txt) $ do yield txt
---                                      go
--- {-# INLINABLE fromHandle#-}
--- #endif
+
 {-| Stream text from a file using Pipes.Safe
 
 >>> runSafeT $ runEffect $ Text.readFile "hello.hs" >-> Text.map toUpper >-> hoist lift Text.stdout
 MAIN = PUTSTRLN "HELLO WORLD"
 -}
 
-readFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Producer' Text m (Producer ByteString m ())
+readFile :: (MonadSafe m) => FilePath -> Producer Text m (Producer ByteString m ())
 readFile file = Safe.withFile file IO.ReadMode fromHandle
 {-# INLINABLE readFile #-}
 
@@ -338,7 +302,7 @@ toHandle h = for cat (liftIO . T.hPutStr h)
 
 
 -- | Stream text into a file. Uses @pipes-safe@.
-writeFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Consumer' Text m ()
+writeFile :: (MonadSafe m) => FilePath -> Consumer' Text m ()
 writeFile file = Safe.withFile file IO.WriteMode toHandle
 
 -- | Apply a transformation to each 'Char' in the stream
@@ -624,42 +588,18 @@ count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
 
 -- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded
 -- into a Pipe of Text
-decodeUtf8
-  :: Monad m
-  => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8 = decodeUtf8With Nothing
-{-# INLINEABLE decodeUtf8 #-}
 
--- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded
--- into a Pipe of Text with a replacement function of type @String -> Maybe Word8 -> Maybe Char@
--- E.g. 'Data.Text.Encoding.Error.lenientDecode', which simply replaces bad bytes with \"�\"
-decodeUtf8With
-  :: Monad m  
-  => Maybe TE.OnDecodeError 
-  -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8With onErr = go (PE.streamDecodeUtf8With onErr) B.empty where 
-  go dec old p = do
-    x <- lift (next p)
-    case x of
-      Left r -> if B.null old then return (return r)
-                              else return (do yield old 
-                                              return r)
-      Right (chunk, p') -> 
-        case dec chunk of 
-          PE.Some text l dec' -> 
-            if T.null text then go dec' (B.append old l) p'
-                           else do yield text
-                                   go dec' B.empty p'
-          PE.Other text bs ->
-            if T.null text then return (do yield old 
-                                           yield bs
-                                           p')
-                           else do yield text
-                                   return (do yield bs
-                                              p')
-{-# INLINEABLE decodeUtf8With #-}
-
-
+decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+decodeUtf8 = go PE.streamDecodeUtf8 where
+  go dec0 p = do 
+     x <- lift (next p)
+     case x of Left r -> return (return r)
+               Right (chunk, p') -> 
+                 case dec0 chunk of PE.Some text _ dec -> do yield text
+                                                             go dec p'
+                                    PE.Other text bs -> do yield text
+                                                           return (do yield bs
+                                                                      p')
 
 -- | Splits a 'Producer' after the given number of characters
 splitAt

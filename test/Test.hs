@@ -8,6 +8,7 @@ import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Control.Exception (catch)
 import Data.Char (chr, isDigit, isHexDigit, isLower, isSpace, isUpper, ord)
 import Data.Monoid (Monoid(..))
+import Control.Monad
 import Data.String (fromString)
 import Data.Text.Encoding.Error
 import qualified Data.List as L
@@ -19,15 +20,20 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Encoding as E
 import qualified Pipes.Text.Internal as PE
+import qualified Pipes.Text as TP
+import qualified Pipes.ByteString as BP 
+import qualified Pipes as P 
 
+
+import Debug.Trace
 main :: IO ()
 main = defaultMain [tests]
 -- >>> :main  -a 10000
 
 tests = testGroup "stream_decode" [
-
-  testProperty "t_utf8_incr_valid" t_utf8_incr_valid,
-  testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed]
+  -- testProperty "t_utf8_incr_valid" t_utf8_incr_valid,
+  testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed,
+   testProperty "t_utf8_incr_pipe" t_utf8_incr_pipe]
 
 t_utf8_incr_valid  = do
         Positive n <- arbitrary
@@ -43,18 +49,46 @@ t_utf8_incr_valid  = do
                               PE.Some t _ f' -> t : feedChunksOf n f' b
                               _             -> []
 
-t_utf8_incr_mixed  = do    
-       Positive n <- arbitrary  
+t_utf8_incr_mixed  = do
+       Positive n <- arbitrary
        txt <- genUnicode
-       forAll (vector 9) $ (roundtrip . chunk (mod n 7 + 1) . appendBytes txt) `eq` appendBytes txt
+       let chunkSize = mod n 7 + 1
+       forAll (vector 9) $ 
+              (roundtrip . chunk chunkSize . appendBytes txt) `eq` (appendBytes txt)
     where 
     roundtrip :: [B.ByteString] -> B.ByteString
-    roundtrip bss = go (PE.streamDecodeUtf8With Nothing) B.empty B.empty bss where                                                      
-       go dec acc old [] = acc <> old
-       go dec acc old (bs:bss) = case dec bs of 
-         PE.Some t new dec' -> if T.null t then go dec' (acc <> E.encodeUtf8 t) (old <> new) bss
-                                           else go dec' (acc <> E.encodeUtf8 t) new bss
-         PE.Other t bs' -> if T.null t then acc <> old <> bs <> B.concat bss 
-                                       else acc <> E.encodeUtf8 t <> bs' <> B.concat bss 
+    roundtrip bss = go PE.streamDecodeUtf8 B.empty bss where    
+       go dec acc [] = acc   
+       go dec acc [bs]  = case dec bs of 
+          PE.Some t l dec' -> acc <> E.encodeUtf8 t <> l
+          PE.Other t bs'   -> acc <> E.encodeUtf8 t <> bs' 
+       go dec acc (bs:bss) = case dec bs of 
+         PE.Some t l dec' -> go dec' (acc <> E.encodeUtf8 t) bss
+         PE.Other t bs'   -> acc <> E.encodeUtf8 t <> bs' <> B.concat bss
     chunk n bs = let (a,b) = B.splitAt n bs in if B.null a then [] else a : chunk n b
     appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
+
+
+
+
+t_utf8_incr_pipe  = do    
+       Positive  m <- arbitrary
+       Positive n  <- arbitrary  
+       txt         <- genUnicode
+       let chunkSize = mod n 7 + 1
+           bytesLength = mod 20 m
+       forAll (vector bytesLength) $ 
+              (BL.toStrict . BP.toLazy . roundtrip . P.each . chunk chunkSize . appendBytes txt) 
+              `eq` 
+              appendBytes txt
+    where 
+    roundtrip :: Monad m => P.Producer B.ByteString m r -> P.Producer B.ByteString m r
+    roundtrip p = do pbs <- TP.decodeUtf8 p P.>-> TP.encodeUtf8
+                     pbs
+    chunk n bs = let (a,b) = B.splitAt n bs in if B.null a then [] else a : chunk n b
+    appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
+
+
+
+
+
