@@ -23,17 +23,16 @@ import qualified Pipes.Text.Internal as PE
 import qualified Pipes.Text as TP
 import qualified Pipes.ByteString as BP 
 import qualified Pipes as P 
-
-
 import Debug.Trace
+
 main :: IO ()
 main = defaultMain [tests]
 -- >>> :main  -a 10000
 
 tests = testGroup "stream_decode" [
   -- testProperty "t_utf8_incr_valid" t_utf8_incr_valid,
-  testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed,
-   testProperty "t_utf8_incr_pipe" t_utf8_incr_pipe]
+--  testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed ] -- ,
+  testProperty "t_utf8_incr_pipe" t_utf8_incr_pipe]
 
 t_utf8_incr_valid  = do
         Positive n <- arbitrary
@@ -68,23 +67,19 @@ t_utf8_incr_mixed  = do
     chunk n bs = let (a,b) = B.splitAt n bs in if B.null a then [] else a : chunk n b
     appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
 
-
-
-
 t_utf8_incr_pipe  = do    
        Positive  m <- arbitrary
        Positive n  <- arbitrary  
        txt         <- genUnicode
        let chunkSize = mod n 7 + 1
-           bytesLength = mod 20 m
+           bytesLength = mod 3 m
        forAll (vector bytesLength) $ 
               (BL.toStrict . BP.toLazy . roundtrip . P.each . chunk chunkSize . appendBytes txt) 
               `eq` 
               appendBytes txt
     where 
     roundtrip :: Monad m => P.Producer B.ByteString m r -> P.Producer B.ByteString m r
-    roundtrip p = do pbs <- TP.decodeUtf8 p P.>-> TP.encodeUtf8
-                     pbs
+    roundtrip p = join (TP.decodeUtf8 p P.>-> TP.encodeUtf8) 
     chunk n bs = let (a,b) = B.splitAt n bs in if B.null a then [] else a : chunk n b
     appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
 

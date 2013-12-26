@@ -141,6 +141,7 @@ module Pipes.Text  (
 import Control.Exception (throwIO, try)
 import Control.Monad (liftM, unless)
 import Control.Monad.Trans.State.Strict (StateT(..))
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as TE
@@ -590,16 +591,17 @@ count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
 -- into a Pipe of Text
 
 decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8 = go PE.streamDecodeUtf8 where
-  go dec0 p = do 
-     x <- lift (next p)
-     case x of Left r -> return (return r)
-               Right (chunk, p') -> 
-                 case dec0 chunk of PE.Some text _ dec -> do yield text
-                                                             go dec p'
-                                    PE.Other text bs -> do yield text
-                                                           return (do yield bs
-                                                                      p')
+decodeUtf8 = go B.empty PE.streamDecodeUtf8 where
+  go carry dec0 p = do 
+     x <- lift (next p) 
+     case x of Left r -> return (do yield carry
+                                    return r)
+               Right (chunk, p') -> case dec0 chunk of 
+                   PE.Some text carry2 dec -> do yield text
+                                                 go carry2 dec p'
+                   PE.Other text bs -> do yield text 
+                                          return (do yield bs
+                                                     p')
 
 -- | Splits a 'Producer' after the given number of characters
 splitAt
