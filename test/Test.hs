@@ -23,7 +23,6 @@ import qualified Pipes.Text.Internal as PE
 import qualified Pipes.Text as TP
 import qualified Pipes.ByteString as BP 
 import qualified Pipes as P 
-import Debug.Trace
 
 main :: IO ()
 main = defaultMain [tests]
@@ -31,7 +30,7 @@ main = defaultMain [tests]
 
 tests = testGroup "stream_decode" [
   -- testProperty "t_utf8_incr_valid" t_utf8_incr_valid,
---  testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed ] -- ,
+  testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed ,
   testProperty "t_utf8_incr_pipe" t_utf8_incr_pipe]
 
 t_utf8_incr_valid  = do
@@ -72,7 +71,7 @@ t_utf8_incr_pipe  = do
        Positive n  <- arbitrary  
        txt         <- genUnicode
        let chunkSize = mod n 7 + 1
-           bytesLength = mod 3 m
+           bytesLength = mod 10 m
        forAll (vector bytesLength) $ 
               (BL.toStrict . BP.toLazy . roundtrip . P.each . chunk chunkSize . appendBytes txt) 
               `eq` 

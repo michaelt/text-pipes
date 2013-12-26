@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeFamilies, NoMonomorphismRestriction #-}
+{-# LANGUAGE RankNTypes, TypeFamilies #-}
 
 {-| This module provides @pipes@ utilities for \"text streams\", which are
     streams of 'Text' chunks.  The individual chunks are uniformly @strict@, but 
@@ -587,20 +587,23 @@ count :: (Monad m, Num n) => Text -> Producer Text m () -> m n
 count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
 {-# INLINABLE count #-}
 
--- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded
--- into a Pipe of Text
+-- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded into a Pipe of Text
+-- returning a Pipe of ByteStrings that begins at the point of failure.
 
 decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
 decodeUtf8 = go B.empty PE.streamDecodeUtf8 where
   go carry dec0 p = do 
      x <- lift (next p) 
-     case x of Left r -> return (do yield carry
-                                    return r)
+     case x of Left r -> if B.null carry 
+                           then return (return r)      -- all input was consumed
+                           else return (do yield carry -- a potentially valid fragment remains
+                                           return r)
+                                           
                Right (chunk, p') -> case dec0 chunk of 
                    PE.Some text carry2 dec -> do yield text
                                                  go carry2 dec p'
                    PE.Other text bs -> do yield text 
-                                          return (do yield bs
+                                          return (do yield bs -- an invalid blob remains
                                                      p')
 
 -- | Splits a 'Producer' after the given number of characters
