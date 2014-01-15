@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeFamilies, CPP #-}
+{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns #-}
 
 {-| This module provides @pipes@ utilities for \"text streams\", which are
     streams of 'Text' chunks.  The individual chunks are uniformly @strict@, but 
@@ -81,10 +81,6 @@ module Pipes.Text  (
     filter,
     scan,
     encodeUtf8,
-#if MIN_VERSION_text(0,11,4)
-    pipeDecodeUtf8,
-    pipeDecodeUtf8With,
-#endif
     pack,
     unpack,
     toCaseFold,
@@ -119,10 +115,7 @@ module Pipes.Text  (
     group,
     lines,
     words,
-#if MIN_VERSION_text(0,11,4)
     decodeUtf8,
-    decodeUtf8With,
-#endif
     -- * Transformations
     intersperse,
     
@@ -148,6 +141,7 @@ module Pipes.Text  (
 import Control.Exception (throwIO, try)
 import Control.Monad (liftM, unless)
 import Control.Monad.Trans.State.Strict (StateT(..))
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as TE
@@ -167,6 +161,7 @@ import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
 import qualified Pipes.ByteString.Parse as PBP
+import qualified Pipes.Text.Internal as PE
 import Pipes.Text.Parse (
     nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
 import Pipes.Core (respond, Server')
@@ -211,48 +206,36 @@ import Prelude hiding (
 -- | Convert a lazy 'TL.Text' into a 'Producer' of strict 'Text's
 fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
 fromLazy  = foldrChunks (\e a -> yield e >> a) (return ()) 
-{-# INLINABLE fromLazy #-}
+{-# INLINE fromLazy #-}
 
 -- | Stream text from 'stdin'
-stdin :: MonadIO m => Producer' Text m ()
+stdin :: MonadIO m => Producer Text m ()
 stdin = fromHandle IO.stdin
-{-# INLINABLE stdin #-}
+{-# INLINE stdin #-}
 
 {-| Convert a 'IO.Handle' into a text stream using a text size 
-    determined by the good sense of the text library. 
-
+    determined by the good sense of the text library; note that this
+    is distinctly slower than @decideUtf8 (Pipes.ByteString.fromHandle h)@
+    but uses the system encoding and has other `Data.Text.IO` features
 -}
 
-fromHandle :: MonadIO m => IO.Handle -> Producer' Text m ()
-#if MIN_VERSION_text(0,11,4)
-fromHandle h = go TE.streamDecodeUtf8 where
-  act = B.hGetSome h defaultChunkSize
-  go dec = do chunk <- liftIO act
-              case dec chunk of 
-                TE.Some text _ dec' -> do yield text
-                                          unless (B.null chunk) (go dec')
-{-# INLINE fromHandle#-}
--- bytestring fromHandle + streamDecodeUtf8 is 3 times as fast as
--- the dedicated Text IO function 'hGetChunk' ;
--- this way "runEffect $ PT.fromHandle hIn  >->  PT.toHandle hOut"
--- runs the same as the conduit equivalent, only slightly slower 
--- than "runEffect $ PB.fromHandle hIn  >->  PB.toHandle hOut"
-#else
-fromHandle h = go where
-    go = do txt <- liftIO (T.hGetChunk h)
-            unless (T.null txt) $ do yield txt
-                                     go
+fromHandle :: MonadIO m => IO.Handle -> Producer Text m ()
+fromHandle h =  go where
+      go = do txt <- liftIO (T.hGetChunk h)
+              unless (T.null txt) $ do yield txt
+                                       go
 {-# INLINABLE fromHandle#-}
-#endif
-{-| Stream text from a file using Pipes.Safe
+
+
+{-| Stream text from a file in the simple fashion of @Data.Text.IO@ 
 
 >>> runSafeT $ runEffect $ Text.readFile "hello.hs" >-> Text.map toUpper >-> hoist lift Text.stdout
 MAIN = PUTSTRLN "HELLO WORLD"
 -}
 
-readFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Producer' Text m ()
+readFile :: MonadSafe m => FilePath -> Producer Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
-{-# INLINABLE readFile #-}
+{-# INLINE readFile #-}
 
 {-| Stream lines of text from stdin (for testing in ghci etc.) 
 
@@ -272,7 +255,7 @@ stdinLn = go where
             txt <- liftIO (T.hGetLine IO.stdin)
             yield txt
             go
-
+{-# INLINABLE stdinLn #-}
 
 {-| Stream text to 'stdout'
 
@@ -326,8 +309,9 @@ toHandle h = for cat (liftIO . T.hPutStr h)
 
 
 -- | Stream text into a file. Uses @pipes-safe@.
-writeFile :: (MonadSafe m, Base m ~ IO) => FilePath -> Consumer' Text m ()
+writeFile :: (MonadSafe m) => FilePath -> Consumer' Text m ()
 writeFile file = Safe.withFile file IO.WriteMode toHandle
+{-# INLINE writeFile #-}
 
 -- | Apply a transformation to each 'Char' in the stream
 map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
@@ -610,74 +594,26 @@ count :: (Monad m, Num n) => Text -> Producer Text m () -> m n
 count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
 {-# INLINABLE count #-}
 
-#if MIN_VERSION_text(0,11,4)
--- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded
--- into a Pipe of Text
-decodeUtf8
-  :: Monad m
-  => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8 = go TE.streamDecodeUtf8
-  where go dec p = do
-            x <- lift (next p)
-            case x of
-                Left r -> return (return r)
-                Right (chunk, p') -> do
-                    let TE.Some text l dec' = dec chunk
-                    if B.null l
-                      then do
-                          yield text
-                          go dec' p'
-                      else return $ do
-                          yield l
-                          p'
-{-# INLINEABLE decodeUtf8 #-}
+-- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded into a Pipe of Text
+-- returning a Pipe of ByteStrings that begins at the point of failure.
 
--- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded
--- into a Pipe of Text with a replacement function of type @String -> Maybe Word8 -> Maybe Char@
--- E.g. 'Data.Text.Encoding.Error.lenientDecode', which simply replaces bad bytes with \"�\"
-decodeUtf8With 
-  :: Monad m  
-  => TE.OnDecodeError 
-  -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8With onErr = go (TE.streamDecodeUtf8With onErr)
-  where go dec p = do
-            x <- lift (next p)
-            case x of
-                Left r -> return (return r)
-                Right (chunk, p') -> do
-                    let TE.Some text l dec' = dec chunk
-                    if B.null l
-                      then do
-                          yield text
-                          go dec' p'
-                      else return $ do
-                          yield l
-                          p'
-{-# INLINEABLE decodeUtf8With #-}
+decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+decodeUtf8 = go B.empty PE.streamDecodeUtf8 where
+  go !carry dec0 p = do 
+     x <- lift (next p) 
+     case x of Left r -> if B.null carry 
+                           then return (return r)      -- all bytestrinput was consumed
+                           else return (do yield carry -- a potentially valid fragment remains
+                                           return r)
+                                           
+               Right (chunk, p') -> case dec0 chunk of 
+                   PE.Some text carry2 dec -> do yield text
+                                                 go carry2 dec p'
+                   PE.Other text bs -> do yield text 
+                                          return (do yield bs -- an invalid blob remains
+                                                     p')
+{-# INLINABLE decodeUtf8 #-}
 
--- | A simple pipe from 'ByteString' to 'Text'; a decoding error will arise
--- with any chunk that contains a sequence of bytes that is unreadable. Otherwise
--- only few bytes will only be moved from one chunk to the next before decoding.
-pipeDecodeUtf8 :: Monad m => Pipe ByteString Text m r
-pipeDecodeUtf8 = go TE.streamDecodeUtf8
-  where go dec = do chunk <- await
-                    case dec chunk of 
-                      TE.Some text l dec' -> do yield text
-                                                go dec'
-{-# INLINEABLE pipeDecodeUtf8 #-}
-
--- | A simple pipe from 'ByteString' to 'Text' using a replacement function.
-pipeDecodeUtf8With 
-  :: Monad m  
-  => TE.OnDecodeError 
-  -> Pipe ByteString Text m r 
-pipeDecodeUtf8With onErr = go (TE.streamDecodeUtf8With onErr)
-  where go dec = do chunk <- await
-                    case dec chunk of 
-                      TE.Some text l dec' -> do yield text
-                                                go dec'
-{-# INLINEABLE pipeDecodeUtf8With #-}
-#endif
 
 -- | Splits a 'Producer' after the given number of characters
 splitAt
