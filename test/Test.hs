@@ -27,11 +27,11 @@ import qualified Pipes as P
 main :: IO ()
 main = defaultMain [tests]
 -- >>> :main  -a 10000
-
 tests = testGroup "stream_decode" [
   -- testProperty "t_utf8_incr_valid" t_utf8_incr_valid,
   testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed ,
-  testProperty "t_utf8_incr_pipe" t_utf8_incr_pipe]
+  testProperty "t_utf8_incr_pipe" t_utf8_incr_pipe,
+  testProperty "t_utf8_dec_some" t_utf8_dec_some]
 
 t_utf8_incr_valid  = do
         Positive n <- arbitrary
@@ -82,6 +82,19 @@ t_utf8_incr_pipe  = do
     chunk n bs = let (a,b) = B.splitAt n bs in if B.null a then [] else a : chunk n b
     appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
 
+--
+t_utf8_dec_some = do    
+       Positive  m <- arbitrary
+       txt         <- genUnicode
+       let bytesLength = mod 10 m :: Int
+       forAll (vector bytesLength) $ 
+              (roundtrip . appendBytes txt) 
+              `eq` 
+              appendBytes txt
+    where 
+    roundtrip bs = case PE.decodeSomeUtf8 bs of
+                        (txt,bys) -> E.encodeUtf8 txt <> bys
+    appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
 
 
 
