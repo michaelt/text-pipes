@@ -79,30 +79,38 @@ decode(uint32_t *state, uint32_t* codep, uint32_t byte) {
  *      state0 != UTF8_ACCEPT, UTF8_REJECT
  *
  */
-const uint8_t *
-_hs_pipes_text_decode_utf8_state(uint16_t *const dest, size_t *destoff,
-                           const uint8_t **const src,
-                           const uint8_t *const srcend,
-                           uint32_t *codepoint0, uint32_t *state0)
+
+ #if defined(__GNUC__) || defined(__clang__)
+ static inline uint8_t const *
+ _hs_pipes_text_decode_utf8_int(uint16_t *const dest, size_t *destoff,
+ 			 const uint8_t const **src, const uint8_t const *srcend,
+ 			 uint32_t *codepoint0, uint32_t *state0)
+   __attribute((always_inline));
+ #endif
+
+static inline uint8_t const *
+_hs_pipes_text_decode_utf8_int(uint16_t *const dest, size_t *destoff,
+			 const uint8_t const **src, const uint8_t const *srcend,
+			 uint32_t *codepoint0, uint32_t *state0)
 {
-  uint16_t *d = dest + *destoff;
-  const uint8_t *s = *src, *last = *src;
-  uint32_t state = *state0;
-  uint32_t codepoint = *codepoint0;
+ uint16_t *d = dest + *destoff;
+ const uint8_t *s = *src, *last = *src;
+ uint32_t state = *state0;
+ uint32_t codepoint = *codepoint0;
 
-  while (s < srcend) {
+ while (s < srcend) {
 #if defined(__i386__) || defined(__x86_64__)
-    /*
-     * This code will only work on a little-endian system that
-     * supports unaligned loads.
-     *
-     * It gives a substantial speed win on data that is purely or
-     * partly ASCII (e.g. HTML), at only a slight cost on purely
-     * non-ASCII text.
-     */
+   /*
+    * This code will only work on a little-endian system that
+    * supports unaligned loads.
+    *
+    * It gives a substantial speed win on data that is purely or
+    * partly ASCII (e.g. HTML), at only a slight cost on purely
+    * non-ASCII text.
+    */
 
-    if (state == UTF8_ACCEPT) {
-      while (s < srcend - 4) {
+   if (state == UTF8_ACCEPT) {
+     while (s < srcend - 4) {
 	codepoint = *((uint32_t *) s);
 	if ((codepoint & 0x80808080) != 0)
 	  break;
@@ -117,35 +125,44 @@ _hs_pipes_text_decode_utf8_state(uint16_t *const dest, size_t *destoff,
 	*d++ = (uint16_t) ((codepoint >> 8) & 0xff);
 	*d++ = (uint16_t) ((codepoint >> 16) & 0xff);
 	*d++ = (uint16_t) ((codepoint >> 24) & 0xff);
-      }
-      last = s;
-    }
+     }
+     last = s;
+   }
 #endif
 
-    if (decode(&state, &codepoint, *s++) != UTF8_ACCEPT) {
-      if (state != UTF8_REJECT)
+   if (decode(&state, &codepoint, *s++) != UTF8_ACCEPT) {
+     if (state != UTF8_REJECT)
 	continue;
-      break;
-    }
+     break;
+   }
 
-    if (codepoint <= 0xffff)
-      *d++ = (uint16_t) codepoint;
-    else {
-      *d++ = (uint16_t) (0xD7C0 + (codepoint >> 10));
-      *d++ = (uint16_t) (0xDC00 + (codepoint & 0x3FF));
-    }
-    last = s;
-  }
+   if (codepoint <= 0xffff)
+     *d++ = (uint16_t) codepoint;
+   else {
+     *d++ = (uint16_t) (0xD7C0 + (codepoint >> 10));
+     *d++ = (uint16_t) (0xDC00 + (codepoint & 0x3FF));
+   }
+   last = s;
+ }
 
-  /* Invalid encoding, back up to the errant character */
-  if (state == UTF8_REJECT)
-    s -= 1;
+ *destoff = d - dest;
+ *codepoint0 = codepoint;
+ *state0 = state;
+ *src = last;
 
-  *destoff = d - dest;
-  *codepoint0 = codepoint;
-  *state0 = state;
-  *src = last;
+ return s;
+}
 
-  return s;
+uint8_t const *
+_hs_pipes_text_decode_utf8_state(uint16_t *const dest, size_t *destoff,
+                          const uint8_t const **src,
+			   const uint8_t const *srcend,
+                          uint32_t *codepoint0, uint32_t *state0)
+{
+ uint8_t const *ret = _hs_pipes_text_decode_utf8_int(dest, destoff, src, srcend,
+						codepoint0, state0);
+ if (*state0 == UTF8_REJECT)
+   ret -=1;
+ return ret;
 }
 

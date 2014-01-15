@@ -6,36 +6,25 @@
 module Pipes.Text.Internal 
     ( Decoding(..)
     , streamDecodeUtf8
+    , decodeSomeUtf8
     ) where
-
-import Control.Exception (evaluate, try)
-#if __GLASGOW_HASKELL__ >= 702
 import Control.Monad.ST.Unsafe (unsafeIOToST, unsafeSTToIO)
 import Control.Monad.ST (ST, runST)
-#else
-import Control.Monad.ST (unsafeIOToST, unsafeSTToIO, ST, runST)
-#endif
 import Data.Bits ((.&.))
-import Data.ByteString as B
-import Data.ByteString.Internal as B
-import Data.Text ()
-import qualified Data.Text as T
-import Data.Text.Encoding.Error (OnDecodeError, UnicodeException, strictDecode)
-import Data.Text.Internal (Text(..), safe, textP)
-import Data.Word (Word8, Word32)
+import Data.ByteString as B 
+import Data.ByteString.Internal as B 
+import qualified Data.Text as T (null)
+import Data.Text.Encoding.Error ()
+import Data.Text.Internal (Text, textP)
 import Foreign.C.Types (CSize)
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr, minusPtr, nullPtr, plusPtr)
 import Foreign.Storable (Storable, peek, poke)
-import GHC.Base hiding (ord)
-import GHC.Word
+import GHC.Base  (Char(..), Int(..), MutableByteArray#, ord#, iShiftRA#)
+import GHC.Word (Word8, Word32)
 import qualified Data.Text.Array as A
-import GHC.Exts (Char(..), Int(..), chr#, ord#, word2Int#)
-import GHC.Word (Word8(..), Word16(..), Word32(..))
-
-import Data.Text.Unsafe (unsafeDupablePerformIO)
-
+    
 #include "pipes_text_cbits.h"
 
 -- | A stream oriented decoding result.
@@ -52,44 +41,102 @@ instance Show Decoding where
                                 showChar ' ' . showsPrec prec' bs .
                                 showString " _"
       where prec = 10; prec' = prec + 1
-      
+
 newtype CodePoint = CodePoint Word32 deriving (Eq, Show, Num, Storable)
 newtype DecoderState = DecoderState Word32 deriving (Eq, Show, Num, Storable)
 
 streamDecodeUtf8 :: ByteString -> Decoding
-streamDecodeUtf8 = decodeChunk B.empty 0 0
+streamDecodeUtf8 = decodeChunkUtf8 B.empty 0 0 
+  where
+  decodeChunkUtf8 :: ByteString -> CodePoint -> DecoderState -> ByteString -> Decoding
+  decodeChunkUtf8 old codepoint0 state0 bs@(PS fp off len) = 
+                    runST $ do marray <- A.new (len+1) 
+                               unsafeIOToST (decodeChunkToBuffer marray)
+     where
+     decodeChunkToBuffer :: A.MArray s -> IO Decoding
+     decodeChunkToBuffer dest = withForeignPtr fp $ \ptr ->
+       with (0::CSize) $ \destOffPtr ->
+       with codepoint0 $ \codepointPtr ->
+       with state0     $ \statePtr ->
+       with nullPtr    $ \curPtrPtr ->
+         do let end = ptr `plusPtr` (off + len)
+                curPtr = ptr `plusPtr` off
+            poke curPtrPtr curPtr
+            c_decode_utf8_with_state (A.maBA dest) destOffPtr curPtrPtr end codepointPtr statePtr
+            state <- peek statePtr
+            lastPtr <- peek curPtrPtr
+            codepoint <- peek codepointPtr
+            n <- peek destOffPtr
+            chunkText <- mkText dest n
+            let left      = lastPtr `minusPtr` curPtr
+                remaining = B.drop left bs
+                accum = if T.null chunkText then B.append old remaining  else remaining 
+            return $! case state of 
+              UTF8_REJECT -> Other chunkText accum -- We encountered an encoding error
+              _ ->           Some  chunkText accum (decodeChunkUtf8 accum codepoint state)
+     {-# INLINE decodeChunkToBuffer #-}
+  {-# INLINE decodeChunkUtf8 #-}
+{-# INLINE streamDecodeUtf8 #-}
 
-decodeChunk :: ByteString -> CodePoint -> DecoderState -> ByteString -> Decoding
-decodeChunk old codepoint0 state0 bs@(PS fp off len) = 
-                  runST $ do marray <- A.new (len+1) 
-                             unsafeIOToST (decodeChunkToBuffer marray)
-   where
-   decodeChunkToBuffer :: A.MArray s -> IO Decoding
-   decodeChunkToBuffer dest = withForeignPtr fp $ \ptr ->
-     with (0::CSize) $ \destOffPtr ->
-     with codepoint0 $ \codepointPtr ->
-     with state0     $ \statePtr ->
-     with nullPtr    $ \curPtrPtr ->
+decodeSomeUtf8 :: ByteString -> (Text, ByteString)
+decodeSomeUtf8 bs@(PS fp off len) = runST $ do 
+  dest <- A.new (len+1) 
+  unsafeIOToST $ 
+     withForeignPtr fp $ \ptr ->
+     with (0::CSize)        $ \destOffPtr ->
+     with (0::CodePoint)    $ \codepointPtr ->
+     with (0::DecoderState) $ \statePtr ->
+     with nullPtr           $ \curPtrPtr ->
        do let end = ptr `plusPtr` (off + len)
               curPtr = ptr `plusPtr` off
           poke curPtrPtr curPtr
-          c_decode_utf8_with_state (A.maBA dest) destOffPtr curPtrPtr end codepointPtr statePtr
+          c_decode_utf8_with_state (A.maBA dest) destOffPtr 
+                                   curPtrPtr end codepointPtr statePtr
           state <- peek statePtr
           lastPtr <- peek curPtrPtr
           codepoint <- peek codepointPtr
           n <- peek destOffPtr
-          chunkText <- mkText dest n
+          chunkText <- unsafeSTToIO $ do arr <- A.unsafeFreeze dest
+                                         return $! textP arr 0 (fromIntegral n)
           let left      = lastPtr `minusPtr` curPtr
               remaining = B.drop left bs
-              accum = if T.null chunkText then B.append old remaining  else remaining 
-          return $ case state of 
-            UTF8_REJECT -> Other chunkText accum -- We encountered an encoding error
-            _ ->           Some  chunkText accum (decodeChunk accum codepoint state)
+          return $! (chunkText, remaining)
+{-# INLINE decodeSomeUtf8 #-}
+
+-- decodeSomeUtf8 :: ByteString -> (Text, ByteString)
+-- decodeSomeUtf8 bs@(PS fp off len) = 
+--                   runST $ do marray <- A.new (len+1) 
+--                              unsafeIOToST (decodeChunkToBuffer marray)
+--   
+--      where
+--      decodeChunkToBuffer :: A.MArray s -> IO (Text, ByteString)
+--      decodeChunkToBuffer dest = withForeignPtr fp $ \ptr ->
+--        with (0::CSize)        $ \destOffPtr ->
+--        with (0::CodePoint)    $ \codepointPtr ->
+--        with (0::DecoderState) $ \statePtr ->
+--        with nullPtr           $ \curPtrPtr ->
+--          do let end = ptr `plusPtr` (off + len)
+--                 curPtr = ptr `plusPtr` off
+--             poke curPtrPtr curPtr
+--             c_decode_utf8_with_state (A.maBA dest) destOffPtr curPtrPtr end codepointPtr statePtr
+--             state <- peek statePtr
+--             lastPtr <- peek curPtrPtr
+--             codepoint <- peek codepointPtr
+--             n <- peek destOffPtr
+--             chunkText <- unsafeSTToIO $ do arr <- A.unsafeFreeze dest
+--                                            return $! textP arr 0 (fromIntegral n)
+--             let left      = lastPtr `minusPtr` curPtr
+--                 remaining = B.drop left bs
+--             return $! (chunkText, remaining)
+--      {-# INLINE decodeChunkToBuffer #-}
+-- {-# INLINE decodeSomeUtf8 #-}
+
 
 
 mkText :: A.MArray s -> CSize -> IO Text
 mkText dest n =  unsafeSTToIO $ do arr <- A.unsafeFreeze dest
                                    return $! textP arr 0 (fromIntegral n)
+{-# INLINE mkText #-}
 
 ord :: Char -> Int
 ord (C# c#) = I# (ord# c#)
@@ -107,6 +154,7 @@ unsafeWrite marr i c
           lo = fromIntegral $ (m `shiftR` 10) + 0xD800
           hi = fromIntegral $ (m .&. 0x3FF) + 0xDC00
           shiftR (I# x#) (I# i#) = I# (x# `iShiftRA#` i#)
+          {-# INLINE shiftR #-}
 {-# INLINE unsafeWrite #-}
 
 foreign import ccall unsafe "_hs_pipes_text_decode_utf8_state" c_decode_utf8_with_state

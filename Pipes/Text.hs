@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeFamilies #-}
+{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns #-}
 
 {-| This module provides @pipes@ utilities for \"text streams\", which are
     streams of 'Text' chunks.  The individual chunks are uniformly @strict@, but 
@@ -206,30 +206,36 @@ import Prelude hiding (
 -- | Convert a lazy 'TL.Text' into a 'Producer' of strict 'Text's
 fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
 fromLazy  = foldrChunks (\e a -> yield e >> a) (return ()) 
-{-# INLINABLE fromLazy #-}
+{-# INLINE fromLazy #-}
 
 -- | Stream text from 'stdin'
-stdin :: MonadIO m => Producer Text m (Producer ByteString m ())
+stdin :: MonadIO m => Producer Text m ()
 stdin = fromHandle IO.stdin
-{-# INLINABLE stdin #-}
+{-# INLINE stdin #-}
 
 {-| Convert a 'IO.Handle' into a text stream using a text size 
-    determined by the good sense of the text library. 
+    determined by the good sense of the text library; note that this
+    is distinctly slower than @decideUtf8 (Pipes.ByteString.fromHandle h)@
+    but uses the system encoding and has other `Data.Text.IO` features
 -}
 
-fromHandle :: MonadIO m => IO.Handle -> Producer Text m (Producer ByteString m ())
-fromHandle h = decodeUtf8 (PB.fromHandle h)
-{-# INLINE fromHandle#-}
+fromHandle :: MonadIO m => IO.Handle -> Producer Text m ()
+fromHandle h =  go where
+      go = do txt <- liftIO (T.hGetChunk h)
+              unless (T.null txt) $ do yield txt
+                                       go
+{-# INLINABLE fromHandle#-}
 
-{-| Stream text from a file using Pipes.Safe
+
+{-| Stream text from a file in the simple fashion of @Data.Text.IO@ 
 
 >>> runSafeT $ runEffect $ Text.readFile "hello.hs" >-> Text.map toUpper >-> hoist lift Text.stdout
 MAIN = PUTSTRLN "HELLO WORLD"
 -}
 
-readFile :: (MonadSafe m) => FilePath -> Producer Text m (Producer ByteString m ())
+readFile :: MonadSafe m => FilePath -> Producer Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
-{-# INLINABLE readFile #-}
+{-# INLINE readFile #-}
 
 {-| Stream lines of text from stdin (for testing in ghci etc.) 
 
@@ -249,7 +255,7 @@ stdinLn = go where
             txt <- liftIO (T.hGetLine IO.stdin)
             yield txt
             go
-
+{-# INLINABLE stdinLn #-}
 
 {-| Stream text to 'stdout'
 
@@ -305,6 +311,7 @@ toHandle h = for cat (liftIO . T.hPutStr h)
 -- | Stream text into a file. Uses @pipes-safe@.
 writeFile :: (MonadSafe m) => FilePath -> Consumer' Text m ()
 writeFile file = Safe.withFile file IO.WriteMode toHandle
+{-# INLINE writeFile #-}
 
 -- | Apply a transformation to each 'Char' in the stream
 map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
@@ -592,10 +599,10 @@ count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
 
 decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
 decodeUtf8 = go B.empty PE.streamDecodeUtf8 where
-  go carry dec0 p = do 
+  go !carry dec0 p = do 
      x <- lift (next p) 
      case x of Left r -> if B.null carry 
-                           then return (return r)      -- all input was consumed
+                           then return (return r)      -- all bytestrinput was consumed
                            else return (do yield carry -- a potentially valid fragment remains
                                            return r)
                                            
@@ -605,6 +612,8 @@ decodeUtf8 = go B.empty PE.streamDecodeUtf8 where
                    PE.Other text bs -> do yield text 
                                           return (do yield bs -- an invalid blob remains
                                                      p')
+{-# INLINABLE decodeUtf8 #-}
+
 
 -- | Splits a 'Producer' after the given number of characters
 splitAt
