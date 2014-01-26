@@ -1,9 +1,12 @@
 {-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns #-}
-
+#if __GLASGOW_HASKELL__ >= 702
+{-# LANGUAGE Trustworthy #-}
+#endif
 {-| This module provides @pipes@ utilities for \"text streams\", which are
-    streams of 'Text' chunks.  The individual chunks are uniformly @strict@, but 
-    a 'Producer' can be converted to and from lazy 'Text's; an 'IO.Handle' can
-    be associated with a 'Producer' or 'Consumer' according as it is read or written to.
+    streams of 'Text' chunks. The individual chunks are uniformly @strict@, but 
+    a 'Producer' can be converted to and from lazy 'Text's, though this is generally 
+    unwise.  Where pipes IO replaces lazy IO, 'Producer Text m r' replaces lazy 'Text'.
+    An 'IO.Handle' can be associated with a 'Producer' or 'Consumer' according as it is read or written to.
 
     To stream to or from 'IO.Handle's, one can use 'fromHandle' or 'toHandle'.  For
     example, the following program copies a document from one file to another:
@@ -52,9 +55,9 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 
     Note that functions in this library are designed to operate on streams that
     are insensitive to text boundaries.  This means that they may freely split
-    text into smaller texts and /discard empty texts/.  However, they will
-    /never concatenate texts/ in order to provide strict upper bounds on memory
-    usage.
+    text into smaller texts, /discard empty texts/.  However, apart from the 
+    special case of 'concatMap', they will /never concatenate texts/ in order 
+    to provide strict upper bounds on memory usage -- with the single exception of 'concatMap'.  
 -}
 
 module Pipes.Text  (
@@ -91,7 +94,7 @@ module Pipes.Text  (
     -- * Folds
     toLazy,
     toLazyM,
-    fold,
+    foldChars,
     head,
     last,
     null,
@@ -116,6 +119,7 @@ module Pipes.Text  (
     lines,
     words,
     decodeUtf8,
+    decode,
     -- * Transformations
     intersperse,
     
@@ -139,7 +143,7 @@ module Pipes.Text  (
     ) where
 
 import Control.Exception (throwIO, try)
-import Control.Monad (liftM, unless)
+import Control.Monad (liftM, unless, join)
 import Control.Monad.Trans.State.Strict (StateT(..))
 import Data.Monoid ((<>))
 import qualified Data.Text as T
@@ -160,13 +164,14 @@ import Foreign.C.Error (Errno(Errno), ePIPE)
 import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
-import qualified Pipes.ByteString.Parse as PBP
+import qualified Pipes.ByteString as PBP
 import qualified Pipes.Text.Internal as PE
+import Pipes.Text.Internal (Codec(..))
 import Pipes.Text.Parse (
     nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
 import Pipes.Core (respond, Server')
 import qualified Pipes.Parse as PP
-import Pipes.Parse (input, concat, FreeT)
+import Pipes.Parse ( FreeT)
 import qualified Pipes.Safe.Prelude as Safe
 import qualified Pipes.Safe as Safe
 import Pipes.Safe (MonadSafe(..), Base(..))
@@ -499,10 +504,10 @@ toLazyM = liftM TL.fromChunks . P.toListM
 {-# INLINABLE toLazyM #-}
 
 -- | Reduce the text stream using a strict left fold over characters
-fold
+foldChars
     :: Monad m
     => (x -> Char -> x) -> x -> (x -> r) -> Producer Text m () -> m r
-fold step begin done = P.fold (T.foldl' step) begin done
+foldChars step begin done = P.fold (T.foldl' step) begin done
 {-# INLINABLE fold #-}
 
 -- | Retrieve the first 'Char'
@@ -880,3 +885,44 @@ unwords = intercalate (yield $ T.pack " ")
 
     @Pipes.Parse@ re-exports 'input', 'concat', and 'FreeT' (the type).
 -}
+
+
+
+decode :: Monad m => PE.Decoding -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+-- decode codec = go B.empty where
+--   go extra p0 = 
+--     do x <- lift (next p0)
+--        case x of Right (chunk, p) -> 
+--                     do let (text, stuff) = codecDecode codec (B.append extra chunk)
+--                        yield text
+--                        case stuff of Right extra' -> go extra' p
+--                                      Left (exc,bs) -> do yield text
+--                                                          return (do yield bs 
+--                                                                     p)
+--  Left r -> return (do yield extra 
+--                      return r) 
+
+decode d p0 = case d of 
+    PE.Other txt bad      -> do yield txt
+                                return (do yield bad
+                                           p0)
+    PE.Some txt extra dec -> do yield txt
+                                x <- lift (next p0)
+                                case x of Left r -> return (do yield extra
+                                                               return r)
+                                          Right (chunk,p1) -> decode (dec chunk) p1
+
+-- go !carry dec0 p = do 
+--    x <- lift (next p) 
+--    case x of Left r -> if B.null carry 
+--                          then return (return r)      -- all bytestrinput was consumed
+--                          else return (do yield carry -- a potentially valid fragment remains
+--                                          return r)
+-- 
+--              Right (chunk, p') -> case dec0 chunk of 
+--                  PE.Some text carry2 dec -> do yield text
+--                                                go carry2 dec p'
+--                  PE.Other text bs -> do yield text 
+--                                         return (do yield bs -- an invalid blob remains
+--                                                    p')
+-- {-# INLINABLE decodeUtf8 #-}

@@ -44,16 +44,16 @@ nextChar = go
 {-| Draw one 'Char' from the underlying 'Producer', returning 'Left' if the
     'Producer' is empty
 -}
-drawChar :: (Monad m) => StateT (Producer Text m r) m (Either r Char)
+drawChar :: (Monad m) => StateT (Producer Text m r) m (Maybe Char)
 drawChar = do
     x <- PP.draw
     case x of
-        Left  r  -> return (Left r)
-        Right txt -> case (T.uncons txt) of
+        Nothing  -> return Nothing
+        Just txt -> case (T.uncons txt) of
             Nothing        -> drawChar
             Just (c, txt') -> do
                 PP.unDraw txt'
-                return (Right c)
+                return (Just c)
 {-# INLINABLE drawChar #-}
 
 -- | Push back a 'Char' onto the underlying 'Producer'
@@ -71,12 +71,12 @@ unDrawChar c = modify (yield (T.singleton c) >>)
 >         Right c -> unDrawChar c
 >     return x
 -}
-peekChar :: (Monad m) => StateT (Producer Text m r) m (Either r Char)
+peekChar :: (Monad m) => StateT (Producer Text m r) m (Maybe Char)
 peekChar = do
     x <- drawChar
     case x of
-        Left  _  -> return ()
-        Right c -> unDrawChar c
+        Nothing  -> return ()
+        Just c -> unDrawChar c
     return x
 {-# INLINABLE peekChar #-}
 
@@ -91,8 +91,8 @@ isEndOfChars :: (Monad m) => StateT (Producer Text m r) m Bool
 isEndOfChars = do
     x <- peekChar
     return (case x of
-        Left  _ -> True
-        Right _ -> False )
+        Nothing -> True
+        Just _-> False )
 {-# INLINABLE isEndOfChars #-}
 
 {-| @(take n)@ only allows @n@ characters to pass
