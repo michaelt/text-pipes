@@ -41,7 +41,7 @@ nextChar = go
                 Just (c, txt') -> return (Right (c, yield txt' >> p'))
 {-# INLINABLE nextChar #-}
 
-{-| Draw one 'Char' from the underlying 'Producer', returning 'Left' if the
+{-| Draw one 'Char' from the underlying 'Producer', returning 'Nothing' if the
     'Producer' is empty
 -}
 drawChar :: (Monad m) => StateT (Producer Text m r) m (Maybe Char)

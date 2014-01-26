@@ -113,16 +113,16 @@ module Pipes.Text  (
     , drawChar
     , unDrawChar
     , peekChar
-    , isEndOfChars,
+    , isEndOfChars
 
     -- * Parsing Lenses 
-    splitAt
+    , splitAt
     , span
     , break
     , groupBy
     , group
- -- , word
- -- , line
+    , word
+    , line
     , decodeUtf8
     , decode
 
@@ -138,12 +138,13 @@ module Pipes.Text  (
 
     -- * Transformations
     , intersperse
---  , packChars
+    , packChars
     
     -- * Joiners
     , intercalate
     , unlines
     , unwords
+
    -- * Re-exports
     -- $reexports
     , module Data.ByteString
@@ -155,7 +156,7 @@ module Pipes.Text  (
 
 import Control.Exception (throwIO, try)
 import Control.Monad (liftM, unless, join)
-import Control.Monad.Trans.State.Strict (StateT(..))
+import Control.Monad.Trans.State.Strict (StateT(..), modify)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -180,10 +181,11 @@ import Pipes
 import qualified Pipes.ByteString as PB
 import qualified Pipes.Text.Internal as PE
 import Pipes.Text.Internal (Codec(..))
-import Pipes.Text.Parse (nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
+-- import Pipes.Text.Parse (nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
+
 import Pipes.Core (respond, Server')
 import qualified Pipes.Parse as PP
-import Pipes.Parse (Parser, concats, intercalates, FreeT)
+import Pipes.Parse (Parser, concats, intercalates, FreeT(..))
 import qualified Pipes.Safe.Prelude as Safe
 import qualified Pipes.Safe as Safe
 import Pipes.Safe (MonadSafe(..), Base(..))
@@ -622,11 +624,94 @@ count :: (Monad m, Num n) => Text -> Producer Text m () -> m n
 count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
 {-# INLINABLE count #-}
 
+
+{-| Consume the first character from a stream of 'Text'
+
+    'next' either fails with a 'Left' if the 'Producer' has no more characters or
+    succeeds with a 'Right' providing the next character and the remainder of the
+    'Producer'.
+-}
+nextChar
+    :: (Monad m)
+    => Producer Text m r
+    -> m (Either r (Char, Producer Text m r))
+nextChar = go
+  where
+    go p = do
+        x <- next p
+        case x of
+            Left   r       -> return (Left r)
+            Right (txt, p') -> case (T.uncons txt) of
+                Nothing        -> go p'
+                Just (c, txt') -> return (Right (c, yield txt' >> p'))
+{-# INLINABLE nextChar #-}
+
+{-| Draw one 'Char' from a stream of 'Text', returning 'Left' if the
+    'Producer' is empty
+-}
+drawChar :: (Monad m) => Parser Text m (Maybe Char)
+drawChar = do
+    x <- PP.draw
+    case x of
+        Nothing  -> return Nothing
+        Just txt -> case (T.uncons txt) of
+            Nothing        -> drawChar
+            Just (c, txt') -> do
+                PP.unDraw txt'
+                return (Just c)
+{-# INLINABLE drawChar #-}
+
+-- | Push back a 'Char' onto the underlying 'Producer'
+unDrawChar :: (Monad m) => Char -> Parser Text m ()
+unDrawChar c = modify (yield (T.singleton c) >>)
+{-# INLINABLE unDrawChar #-}
+
+{-| 'peekChar' checks the first 'Char' in the stream, but uses 'unDrawChar' to
+    push the 'Char' back
+
+> peekChar = do
+>     x <- drawChar
+>     case x of
+>         Left  _  -> return ()
+>         Right c -> unDrawChar c
+>     return x
+-}
+peekChar :: (Monad m) => Parser Text m (Maybe Char)
+peekChar = do
+    x <- drawChar
+    case x of
+        Nothing  -> return ()
+        Just c -> unDrawChar c
+    return x
+{-# INLINABLE peekChar #-}
+
+{-| Check if the underlying 'Producer' has no more characters
+
+    Note that this will skip over empty 'Text' chunks, unlike
+    'PP.isEndOfInput' from @pipes-parse@, which would consider
+    an empty 'Text' a valid bit of input.
+
+> isEndOfChars = liftM isLeft peekChar
+-}
+isEndOfChars :: (Monad m) => Parser Text m Bool
+isEndOfChars = do
+    x <- peekChar
+    return (case x of
+        Nothing -> True
+        Just _-> False )
+{-# INLINABLE isEndOfChars #-}
+
+
+
+
+
 -- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded into a Pipe of Text
 -- returning a Pipe of ByteStrings that begins at the point of failure.
 
-decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8 = go B.empty PE.streamDecodeUtf8 where
+decodeUtf8 :: Monad m => Lens' (Producer ByteString m r) 
+                               (Producer Text m (Producer ByteString m r))
+decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8))) 
+                       (k (go B.empty PE.streamDecodeUtf8 p0)) where
   go !carry dec0 p = do 
      x <- lift (next p) 
      case x of Left r -> if B.null carry 
@@ -647,9 +732,9 @@ decodeUtf8 = go B.empty PE.streamDecodeUtf8 where
 splitAt
     :: (Monad m, Integral n)
     => n
-    -> Producer Text m r
-    -> Producer' Text m (Producer Text m r)
-splitAt = go
+    -> Lens' (Producer Text m r)
+             (Producer Text m (Producer Text m r))
+splitAt n0 k p0 = fmap join (k (go n0 p0))
   where
     go 0 p = return p
     go n p = do
@@ -671,15 +756,16 @@ splitAt = go
 -- | Split a text stream into 'FreeT'-delimited text streams of fixed size
 chunksOf
     :: (Monad m, Integral n)
-    => n -> Producer Text m r -> FreeT (Producer Text m) m r
-chunksOf n p0 = PP.FreeT (go p0)
+    => n -> Lens' (Producer Text m r) 
+                  (FreeT (Producer Text m) m r)
+chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
   where
     go p = do
         x <- next p
         return $ case x of
             Left   r       -> PP.Pure r
             Right (txt, p') -> PP.Free $ do
-                p'' <- splitAt n (yield txt >> p')
+                p'' <- (yield txt >> p') ^. splitAt n 
                 return $ PP.FreeT (go p'')
 {-# INLINABLE chunksOf #-}
 
@@ -689,9 +775,9 @@ chunksOf n p0 = PP.FreeT (go p0)
 span
     :: (Monad m)
     => (Char -> Bool)
-    -> Producer Text m r
-    -> Producer' Text m (Producer Text m r)
-span predicate = go
+    -> Lens' (Producer Text m r)
+             (Producer Text m (Producer Text m r))
+span predicate k p0 = fmap join (k (go p0))
   where
     go p = do
         x <- lift (next p)
@@ -714,117 +800,60 @@ span predicate = go
 break
     :: (Monad m)
     => (Char -> Bool)
-    -> Producer Text m r
-    -> Producer Text m (Producer Text m r)
+    -> Lens' (Producer Text m r)
+             (Producer Text m (Producer Text m r))
 break predicate = span (not . predicate)
 {-# INLINABLE break #-}
 
-{-| Split a text stream into sub-streams delimited by characters that satisfy the
-    predicate
--}
-splitsWith
-    :: (Monad m)
-    => (Char -> Bool)
-    -> Producer Text m r
-    -> PP.FreeT (Producer Text m) m r
-splitsWith predicate p0 = PP.FreeT (go0 p0)
-  where
-    go0 p = do
-        x <- next p
-        case x of
-            Left   r       -> return (PP.Pure r)
-            Right (txt, p') ->
-                if (T.null txt)
-                then go0 p'
-                else return $ PP.Free $ do
-                    p'' <- span (not . predicate) (yield txt >> p')
-                    return $ PP.FreeT (go1 p'')
-    go1 p = do
-        x <- nextChar p
-        return $ case x of
-            Left   r      -> PP.Pure r
-            Right (_, p') -> PP.Free $ do
-                    p'' <- span (not . predicate) p'
-                    return $ PP.FreeT (go1 p'')
-{-# INLINABLE splitsWith #-}
-
--- | Split a text stream using the given 'Char' as the delimiter
-split :: (Monad m)
-      => Char
-      -> Producer Text m r
-      -> FreeT (Producer Text m) m r
-split c = splitsWith (c ==)
-{-# INLINABLE split #-}
-
-{-| Group a text stream into 'FreeT'-delimited text streams using the supplied
-    equality predicate
+{-| Improper lens that splits after the first group of equivalent Chars, as
+    defined by the given equivalence relation
 -}
 groupBy
     :: (Monad m)
     => (Char -> Char -> Bool)
-    -> Producer Text m r
-    -> FreeT (Producer Text m) m r
-groupBy equal p0 = PP.FreeT (go p0)
-  where
+    -> Lens' (Producer Text m r)
+             (Producer Text m (Producer Text m r))
+groupBy equals k p0 = fmap join (k ((go p0))) where
     go p = do
-        x <- next p
+        x <- lift (next p)
         case x of
-            Left   r       -> return (PP.Pure r)
-            Right (txt, p') -> case (T.uncons txt) of
+            Left   r       -> return (return r)
+            Right (txt, p') -> case T.uncons txt of
                 Nothing      -> go p'
-                Just (c, _) -> do
-                    return $ PP.Free $ do
-                        p'' <- span (equal c) (yield txt >> p')
-                        return $ PP.FreeT (go p'')
+                Just (c, _) -> (yield txt >> p') ^. span (equals c) 
 {-# INLINABLE groupBy #-}
 
--- | Group a text stream into 'FreeT'-delimited text streams of identical characters
-group
-    :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
+-- | Improper lens that splits after the first succession of identical 'Char' s
+group :: Monad m 
+      => Lens' (Producer Text m r)
+               (Producer Text m (Producer Text m r))
 group = groupBy (==)
 {-# INLINABLE group #-}
 
-{-| Split a text stream into 'FreeT'-delimited lines
+{-| Improper lens that splits a 'Producer' after the first word
+
+    Unlike 'words', this does not drop leading whitespace 
 -}
-lines
-    :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
-lines p0 = PP.FreeT (go0 p0)
+word :: (Monad m) 
+     => Lens' (Producer Text m r)
+              (Producer Text m (Producer Text m r))
+word k p0 = fmap join (k (to p0))
   where
-    go0 p = do
-        x <- next p
-        case x of
-            Left   r       -> return (PP.Pure r)
-            Right (txt, p') ->
-                if (T.null txt)
-                then go0 p'
-                else return $ PP.Free $ go1 (yield txt >> p')
-    go1 p = do
-        p' <- break ('\n' ==) p
-        return $ PP.FreeT $ do
-            x  <- nextChar p'
-            case x of
-                Left   r      -> return $ PP.Pure r
-                Right (_, p'') -> go0 p''
-{-# INLINABLE lines #-}
+    to p = do
+        p' <- p^.span isSpace
+        p'^.break isSpace
+{-# INLINABLE word #-}
 
 
+line :: (Monad m) 
+     => Lens' (Producer Text m r)
+              (Producer Text m (Producer Text m r))
+line = break (== '\n')
 
--- | Split a text stream into 'FreeT'-delimited words
-words
-    :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
-words = go
-  where
-    go p = PP.FreeT $ do
-        x <- next (p >-> dropWhile isSpace)
-        return $ case x of
-            Left   r       -> PP.Pure r
-            Right (bs, p') -> PP.Free $ do
-                p'' <- break isSpace (yield bs >> p')
-                return (go p'')
-{-# INLINABLE words #-}
+{-# INLINABLE line #-}
 
 
--- | Intersperse a 'Char' in between the characters of the text stream
+-- | Intersperse a 'Char' in between the characters of stream of 'Text'
 intersperse
     :: (Monad m) => Char -> Producer Text m r -> Producer Text m r
 intersperse c = go0
@@ -845,6 +874,104 @@ intersperse c = go0
                 yield (T.intersperse c txt)
                 go1 p'
 {-# INLINABLE intersperse #-}
+
+
+
+-- | Improper isomorphism between a 'Producer' of 'ByteString's and 'Word8's
+packChars :: Monad m => Iso' (Producer Char m x) (Producer Text m x)
+packChars = Data.Profunctor.dimap to (fmap from)
+  where
+    -- to :: Monad m => Producer Char m x -> Producer Text m x
+    to p = PP.folds step id done (p^.PP.chunksOf defaultChunkSize)
+
+    step diffAs c = diffAs . (c:)
+
+    done diffAs = T.pack (diffAs [])
+
+    -- from :: Monad m => Producer Text m x -> Producer Char m x
+    from p = for p (each . T.unpack)
+{-# INLINABLE packChars #-}
+
+{-| Split a text stream into sub-streams delimited by characters that satisfy the
+    predicate
+-}
+splitsWith
+    :: (Monad m)
+    => (Char -> Bool)
+    -> Producer Text m r
+    -> PP.FreeT (Producer Text m) m r
+splitsWith predicate p0 = PP.FreeT (go0 p0)
+  where
+    go0 p = do
+        x <- next p
+        case x of
+            Left   r       -> return (PP.Pure r)
+            Right (txt, p') ->
+                if (T.null txt)
+                then go0 p'
+                else return $ PP.Free $ do
+                    p'' <-  (yield txt >> p') ^. span (not . predicate)
+                    return $ PP.FreeT (go1 p'')
+    go1 p = do
+        x <- nextChar p
+        return $ case x of
+            Left   r      -> PP.Pure r
+            Right (_, p') -> PP.Free $ do
+                    p'' <- p' ^. span (not . predicate) 
+                    return $ PP.FreeT (go1 p'')
+{-# INLINABLE splitsWith #-}
+
+-- | Split a text stream using the given 'Char' as the delimiter
+split :: (Monad m)
+      => Char
+      -> Producer Text m r
+      -> FreeT (Producer Text m) m r
+split c = splitsWith (c ==)
+{-# INLINABLE split #-}
+
+
+{-| Split a text stream into 'FreeT'-delimited lines
+-}
+lines
+    :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
+lines p0 = PP.FreeT (go0 p0)
+  where
+    go0 p = do
+        x <- next p
+        case x of
+            Left   r       -> return (PP.Pure r)
+            Right (txt, p') ->
+                if (T.null txt)
+                then go0 p'
+                else return $ PP.Free $ go1 (yield txt >> p')
+    go1 p = do
+        p' <- p ^. break ('\n' ==)
+        return $ PP.FreeT $ do
+            x  <- nextChar p'
+            case x of
+                Left   r      -> return $ PP.Pure r
+                Right (_, p'') -> go0 p''
+{-# INLINABLE lines #-}
+
+
+
+-- | Split a text stream into 'FreeT'-delimited words
+words
+    :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
+words = go
+  where
+    go p = PP.FreeT $ do
+        x <- next (p >-> dropWhile isSpace)
+        return $ case x of
+            Left   r       -> PP.Pure r
+            Right (bs, p') -> PP.Free $ do
+                p'' <-  (yield bs >> p') ^. break isSpace
+                return (go p'')
+{-# INLINABLE words #-}
+
+
+
+
 
 {-| 'intercalate' concatenates the 'FreeT'-delimited text streams after
     interspersing a text stream in between them
