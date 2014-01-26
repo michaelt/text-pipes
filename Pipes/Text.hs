@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns #-}
+{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, CPP #-}
 #if __GLASGOW_HASKELL__ >= 702
 {-# LANGUAGE Trustworthy #-}
 #endif
@@ -62,84 +62,95 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 
 module Pipes.Text  (
     -- * Producers
-    fromLazy,
-    stdin,
-    fromHandle,
-    readFile,
-    stdinLn,
+      fromLazy
+    , stdin
+    , fromHandle
+    , readFile
+    , stdinLn
 
     -- * Consumers
-    stdout,
-    stdoutLn,
-    toHandle,
-    writeFile,
+    , stdout
+    , stdoutLn
+    , toHandle
+    , writeFile
 
     -- * Pipes
-    map,
-    concatMap,
-    take,
-    drop,
-    takeWhile,
-    dropWhile,
-    filter,
-    scan,
-    encodeUtf8,
-    pack,
-    unpack,
-    toCaseFold,
-    toLower,
-    toUpper,
-    stripStart,
+    , map
+    , concatMap
+    , take
+    , drop
+    , takeWhile
+    , dropWhile
+    , filter
+    , scan
+    , encodeUtf8
+    , pack
+    , unpack
+    , toCaseFold
+    , toLower
+    , toUpper
+    , stripStart
 
     -- * Folds
-    toLazy,
-    toLazyM,
-    foldChars,
-    head,
-    last,
-    null,
-    length,
-    any,
-    all,
-    maximum,
-    minimum,
-    find,
-    index,
-    count,
+    , toLazy
+    , toLazyM
+    , foldChars
+    , head
+    , last
+    , null
+    , length
+    , any
+    , all
+    , maximum
+    , minimum
+    , find
+    , index
+    , count
 
-    -- * Splitters
-    splitAt,
-    chunksOf,
-    span,
-    break,
-    splitWith,
-    split,
-    groupBy,
-    group,
-    lines,
-    words,
-    decodeUtf8,
-    decode,
+    -- * Primitive Character Parsers
+    -- $parse
+    , nextChar
+    , drawChar
+    , unDrawChar
+    , peekChar
+    , isEndOfChars,
+
+    -- * Parsing Lenses 
+    splitAt
+    , span
+    , break
+    , groupBy
+    , group
+ -- , word
+ -- , line
+    , decodeUtf8
+    , decode
+
+    -- * FreeT Splitters
+    , chunksOf
+    , splitsWith
+    , split
+--  , groupsBy
+--  , groups
+    , lines
+    , words
+
+
     -- * Transformations
-    intersperse,
+    , intersperse
+--  , packChars
     
     -- * Joiners
-    intercalate,
-    unlines,
-    unwords,
-
-    -- * Character Parsers
-    -- $parse
-    nextChar,
-    drawChar,
-    unDrawChar,
-    peekChar,
-    isEndOfChars,
-
-    -- * Re-exports
+    , intercalate
+    , unlines
+    , unwords
+   -- * Re-exports
     -- $reexports
-    module Data.Text,
-    module Pipes.Parse
+    , module Data.ByteString
+    , module Data.Text
+    , module Data.Profunctor
+    , module Data.Word
+    , module Pipes.Parse
     ) where
 
 import Control.Exception (throwIO, try)
@@ -158,20 +169,21 @@ import Data.ByteString.Unsafe (unsafeTake, unsafeDrop)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.Char (ord, isSpace)
+import Data.Functor.Constant (Constant(Constant, getConstant))
 import Data.Functor.Identity (Identity)
+import Data.Profunctor (Profunctor)
+import qualified Data.Profunctor
 import qualified Data.List as List
 import Foreign.C.Error (Errno(Errno), ePIPE)
 import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
-import qualified Pipes.ByteString as PBP
 import qualified Pipes.Text.Internal as PE
 import Pipes.Text.Internal (Codec(..))
-import Pipes.Text.Parse (
-    nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
+import Pipes.Text.Parse (nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
 import Pipes.Core (respond, Server')
 import qualified Pipes.Parse as PP
-import Pipes.Parse ( FreeT)
+import Pipes.Parse (Parser, concats, intercalates, FreeT)
 import qualified Pipes.Safe.Prelude as Safe
 import qualified Pipes.Safe as Safe
 import Pipes.Safe (MonadSafe(..), Base(..))
@@ -179,6 +191,7 @@ import qualified Pipes.Prelude as P
 import qualified System.IO as IO
 import Data.Char (isSpace)
 import Data.Word (Word8)
+
 import Prelude hiding (
     all,
     any,
@@ -317,6 +330,15 @@ toHandle h = for cat (liftIO . T.hPutStr h)
 writeFile :: (MonadSafe m) => FilePath -> Consumer' Text m ()
 writeFile file = Safe.withFile file IO.WriteMode toHandle
 {-# INLINE writeFile #-}
+
+
+type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
+
+type Iso' a b = forall f p . (Functor f, Profunctor p) => p b (f b) -> p a (f a)
+
+(^.) :: a -> ((b -> Constant b b) -> (a -> Constant b a)) -> b
+a ^. lens = getConstant (lens Constant a)
+
 
 -- | Apply a transformation to each 'Char' in the stream
 map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
@@ -508,7 +530,7 @@ foldChars
     :: Monad m
     => (x -> Char -> x) -> x -> (x -> r) -> Producer Text m () -> m r
 foldChars step begin done = P.fold (T.foldl' step) begin done
-{-# INLINABLE fold #-}
+{-# INLINABLE foldChars #-}
 
 -- | Retrieve the first 'Char'
 head :: (Monad m) => Producer Text m () -> m (Maybe Char)
@@ -578,6 +600,7 @@ minimum = P.fold step Nothing id
             Nothing -> Just (T.minimum txt)
             Just c -> Just (min c (T.minimum txt))
 {-# INLINABLE minimum #-}
+
 
 -- | Find the first element in the stream that matches the predicate
 find
@@ -699,12 +722,12 @@ break predicate = span (not . predicate)
 {-| Split a text stream into sub-streams delimited by characters that satisfy the
     predicate
 -}
-splitWith
+splitsWith
     :: (Monad m)
     => (Char -> Bool)
     -> Producer Text m r
     -> PP.FreeT (Producer Text m) m r
-splitWith predicate p0 = PP.FreeT (go0 p0)
+splitsWith predicate p0 = PP.FreeT (go0 p0)
   where
     go0 p = do
         x <- next p
@@ -723,14 +746,14 @@ splitWith predicate p0 = PP.FreeT (go0 p0)
             Right (_, p') -> PP.Free $ do
                     p'' <- span (not . predicate) p'
                     return $ PP.FreeT (go1 p'')
-{-# INLINABLE splitWith #-}
+{-# INLINABLE splitsWith #-}
 
 -- | Split a text stream using the given 'Char' as the delimiter
 split :: (Monad m)
       => Char
       -> Producer Text m r
       -> FreeT (Producer Text m) m r
-split c = splitWith (c ==)
+split c = splitsWith (c ==)
 {-# INLINABLE split #-}
 
 {-| Group a text stream into 'FreeT'-delimited text streams using the supplied
