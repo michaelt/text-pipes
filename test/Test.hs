@@ -31,6 +31,7 @@ tests = testGroup "stream_decode" [
   -- testProperty "t_utf8_incr_valid" t_utf8_incr_valid,
   testProperty "t_utf8_incr_mixed" t_utf8_incr_mixed ,
   testProperty "t_utf8_incr_pipe" t_utf8_incr_pipe,
+  testProperty "t_utf8_incr_decoding" t_utf8_incr_decoding,
   testProperty "t_utf8_dec_some" t_utf8_dec_some]
 
 t_utf8_incr_valid  = do
@@ -83,6 +84,22 @@ t_utf8_incr_pipe  = do
     appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
 
 --
+t_utf8_incr_decoding  = do    
+       Positive  m <- arbitrary
+       Positive n  <- arbitrary  
+       txt         <- genUnicode
+       let chunkSize = mod n 7 + 1
+           bytesLength = mod 10 m
+       forAll (vector bytesLength) $ 
+              (BL.toStrict . BP.toLazy . roundtrip . P.each . chunk chunkSize . appendBytes txt) 
+              `eq` 
+              appendBytes txt
+    where 
+    roundtrip :: Monad m => P.Producer B.ByteString m r -> P.Producer B.ByteString m r
+    roundtrip p = join (TP.decode utf8_start p P.>-> TP.encodeUtf8) 
+    chunk n bs = let (a,b) = B.splitAt n bs in if B.null a then [] else a : chunk n b
+    appendBytes txt bts = E.encodeUtf8 txt <> B.pack bts ; (<>) = B.append
+    utf8_start = PE.Some T.empty B.empty (PE.codecDecode PE.utf8)
 t_utf8_dec_some = do    
        Positive  m <- arbitrary
        txt         <- genUnicode
