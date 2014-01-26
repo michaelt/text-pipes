@@ -389,8 +389,8 @@ unpack = for cat (\t -> yield (T.unpack t))
         p >-> unpack = for p (\txt -> yield (T.unpack txt))
   #-}
 
--- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utility, 
--- here acting on a 'Text' pipe, rather as they would  on a lazy text
+-- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utilities, 
+-- here acting as 'Text' pipes, rather as they would  on a lazy text
 toCaseFold :: Monad m => Pipe Text Text m ()
 toCaseFold = P.map T.toCaseFold
 {-# INLINEABLE toCaseFold #-}
@@ -425,7 +425,8 @@ stripStart = do
     let text = T.stripStart chunk
     if T.null text
       then stripStart
-      else cat
+      else do yield text 
+              cat
 {-# INLINEABLE stripStart #-}
 
 -- | @(take n)@ only allows @n@ individual characters to pass; 
