@@ -135,7 +135,6 @@ module Pipes.Text  (
     , lines
     , words
 
-
     -- * Transformations
     , intersperse
     , packChars
@@ -152,6 +151,7 @@ module Pipes.Text  (
     , module Data.Profunctor
     , module Data.Word
     , module Pipes.Parse
+    , module Pipes.Group
     ) where
 
 import Control.Exception (throwIO, try)
@@ -183,8 +183,10 @@ import qualified Pipes.ByteString as PB
 import qualified Pipes.Text.Internal as PE
 import Pipes.Text.Internal (Codec(..))
 import Pipes.Core (respond, Server')
+import Pipes.Group (concats, intercalates, transFreeT, FreeT(..), FreeF(..))
+import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
-import Pipes.Parse (Parser, concats, intercalates, FreeT(..))
+import Pipes.Parse (Parser)
 import qualified Pipes.Safe.Prelude as Safe
 import qualified Pipes.Safe as Safe
 import Pipes.Safe (MonadSafe(..), Base(..))
@@ -867,7 +869,7 @@ packChars :: Monad m => Iso' (Producer Char m x) (Producer Text m x)
 packChars = Data.Profunctor.dimap to (fmap from)
   where
     -- to :: Monad m => Producer Char m x -> Producer Text m x
-    to p = PP.folds step id done (p^.PP.chunksOf defaultChunkSize)
+    to p = PG.folds step id done (p^.PG.chunksOf defaultChunkSize)
 
     step diffAs c = diffAs . (c:)
 
@@ -888,10 +890,10 @@ chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
     go p = do
         x <- next p
         return $ case x of
-            Left   r       -> PP.Pure r
-            Right (txt, p') -> PP.Free $ do
+            Left   r       -> Pure r
+            Right (txt, p') -> Free $ do
                 p'' <- (yield txt >> p') ^. splitAt n 
-                return $ PP.FreeT (go p'')
+                return $ FreeT (go p'')
 {-# INLINABLE chunksOf #-}
 
 
@@ -902,26 +904,26 @@ splitsWith
     :: (Monad m)
     => (Char -> Bool)
     -> Producer Text m r
-    -> PP.FreeT (Producer Text m) m r
-splitsWith predicate p0 = PP.FreeT (go0 p0)
+    -> FreeT (Producer Text m) m r
+splitsWith predicate p0 = FreeT (go0 p0)
   where
     go0 p = do
         x <- next p
         case x of
-            Left   r       -> return (PP.Pure r)
+            Left   r       -> return (Pure r)
             Right (txt, p') ->
                 if (T.null txt)
                 then go0 p'
-                else return $ PP.Free $ do
+                else return $ Free $ do
                     p'' <-  (yield txt >> p') ^. span (not . predicate)
-                    return $ PP.FreeT (go1 p'')
+                    return $ FreeT (go1 p'')
     go1 p = do
         x <- nextChar p
         return $ case x of
-            Left   r      -> PP.Pure r
-            Right (_, p') -> PP.Free $ do
+            Left   r      -> Pure r
+            Right (_, p') -> Free $ do
                     p'' <- p' ^. span (not . predicate) 
-                    return $ PP.FreeT (go1 p'')
+                    return $ FreeT (go1 p'')
 {-# INLINABLE splitsWith #-}
 
 -- | Split a text stream using the given 'Char' as the delimiter
@@ -930,7 +932,7 @@ splits :: (Monad m)
       -> Lens' (Producer Text m r)
                (FreeT (Producer Text m) m r)
 splits c k p =
-          fmap (PP.intercalates (yield (T.singleton c))) (k (splitsWith (c ==) p))
+          fmap (PG.intercalates (yield (T.singleton c))) (k (splitsWith (c ==) p))
 {-# INLINABLE splits #-}
 
 {-| Isomorphism between a stream of 'Text' and groups of equivalent 'Char's , using the
@@ -940,14 +942,14 @@ groupsBy
     :: Monad m
     => (Char -> Char -> Bool)
     -> Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
-groupsBy equals k p0 = fmap concats (k (PP.FreeT (go p0))) where 
+groupsBy equals k p0 = fmap concats (k (FreeT (go p0))) where 
   go p = do x <- next p
-            case x of Left   r       -> return (PP.Pure r)
+            case x of Left   r       -> return (Pure r)
                       Right (bs, p') -> case T.uncons bs of
                              Nothing      -> go p'
-                             Just (c, _) -> do return $ PP.Free $ do
+                             Just (c, _) -> do return $ Free $ do
                                                  p'' <- (yield bs >> p')^.span (equals c)
-                                                 return $ PP.FreeT (go p'')
+                                                 return $ FreeT (go p'')
 {-# INLINABLE groupsBy #-}
 
 
@@ -966,27 +968,27 @@ lines
     :: (Monad m) => Iso' (Producer Text m r)  (FreeT (Producer Text m) m r)
 lines = Data.Profunctor.dimap _lines (fmap _unlines)
   where
-  _lines p0 = PP.FreeT (go0 p0) 
+  _lines p0 = FreeT (go0 p0) 
     where
       go0 p = do
               x <- next p
               case x of
-                  Left   r       -> return (PP.Pure r)
+                  Left   r       -> return (Pure r)
                   Right (txt, p') ->
                       if (T.null txt)
                       then go0 p'
-                      else return $ PP.Free $ go1 (yield txt >> p')
+                      else return $ Free $ go1 (yield txt >> p')
       go1 p = do
               p' <- p ^. break ('\n' ==)
-              return $ PP.FreeT $ do
+              return $ FreeT $ do
                   x  <- nextChar p'
                   case x of
-                      Left   r      -> return $ PP.Pure r
+                      Left   r      -> return $ Pure r
                       Right (_, p'') -> go0 p''
   -- _unlines
   --     :: Monad m
   --      => FreeT (Producer Text m) m x -> Producer Text m x
-  _unlines = PP.concats . PP.transFreeT addNewline
+  _unlines = concats . transFreeT addNewline
 
   -- addNewline
   --     :: Monad m => Producer Text m r -> Producer Text m r
@@ -1000,14 +1002,14 @@ words
     :: (Monad m) => Iso' (Producer Text m r) (FreeT (Producer Text m) m r)
 words = Data.Profunctor.dimap go (fmap _unwords)
   where
-    go p = PP.FreeT $ do
+    go p = FreeT $ do
         x <- next (p >-> dropWhile isSpace)
         return $ case x of
-            Left   r       -> PP.Pure r
-            Right (bs, p') -> PP.Free $ do
+            Left   r       -> Pure r
+            Right (bs, p') -> Free $ do
                 p'' <-  (yield bs >> p') ^. break isSpace
                 return (go p'')
-    _unwords = PP.intercalates (yield $ T.singleton ' ')
+    _unwords = PG.intercalates (yield $ T.singleton ' ')
     
 {-# INLINABLE words #-}
 
@@ -1023,17 +1025,17 @@ intercalate
 intercalate p0 = go0
   where
     go0 f = do
-        x <- lift (PP.runFreeT f)
+        x <- lift (runFreeT f)
         case x of
-            PP.Pure r -> return r
-            PP.Free p -> do
+            Pure r -> return r
+            Free p -> do
                 f' <- p
                 go1 f'
     go1 f = do
-        x <- lift (PP.runFreeT f)
+        x <- lift (runFreeT f)
         case x of
-            PP.Pure r -> return r
-            PP.Free p -> do
+            Pure r -> return r
+            Free p -> do
                 p0
                 f' <- p
                 go1 f'
@@ -1046,10 +1048,10 @@ unlines
 unlines = go
   where
     go f = do
-        x <- lift (PP.runFreeT f)
+        x <- lift (runFreeT f)
         case x of
-            PP.Pure r -> return r
-            PP.Free p -> do
+            Pure r -> return r
+            Free p -> do
                 f' <- p
                 yield $ T.singleton '\n'
                 go f'

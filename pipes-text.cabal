@@ -22,6 +22,7 @@ library
                        text >=0.11             && < 0.12,
                        profunctors  >= 3.1.1   && < 4.1 ,
                        pipes >=4.0             && < 4.2,
+                       pipes-group  >= 1.0.0   && < 1.1 ,
                        pipes-parse >=2.0       && < 3.1,
                        pipes-safe, 
                        pipes-bytestring >= 1.0 && < 2.1,
