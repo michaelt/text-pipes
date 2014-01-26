@@ -129,7 +129,7 @@ module Pipes.Text  (
     -- * FreeT Splitters
     , chunksOf
     , splitsWith
-    , split
+    , splits
 --  , groupsBy
 --  , groups
     , lines
@@ -155,6 +155,7 @@ module Pipes.Text  (
     ) where
 
 import Control.Exception (throwIO, try)
+import Control.Applicative ((<*)) 
 import Control.Monad (liftM, unless, join)
 import Control.Monad.Trans.State.Strict (StateT(..), modify)
 import Data.Monoid ((<>))
@@ -181,8 +182,6 @@ import Pipes
 import qualified Pipes.ByteString as PB
 import qualified Pipes.Text.Internal as PE
 import Pipes.Text.Internal (Codec(..))
--- import Pipes.Text.Parse (nextChar, drawChar, unDrawChar, peekChar, isEndOfChars )
-
 import Pipes.Core (respond, Server')
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser, concats, intercalates, FreeT(..))
@@ -753,21 +752,6 @@ splitAt n0 k p0 = fmap join (k (go n0 p0))
                         return (yield suffix >> p')
 {-# INLINABLE splitAt #-}
 
--- | Split a text stream into 'FreeT'-delimited text streams of fixed size
-chunksOf
-    :: (Monad m, Integral n)
-    => n -> Lens' (Producer Text m r) 
-                  (FreeT (Producer Text m) m r)
-chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
-  where
-    go p = do
-        x <- next p
-        return $ case x of
-            Left   r       -> PP.Pure r
-            Right (txt, p') -> PP.Free $ do
-                p'' <- (yield txt >> p') ^. splitAt n 
-                return $ PP.FreeT (go p'')
-{-# INLINABLE chunksOf #-}
 
 {-| Split a text stream in two, where the first text stream is the longest
     consecutive group of text that satisfy the predicate
@@ -892,6 +876,24 @@ packChars = Data.Profunctor.dimap to (fmap from)
     from p = for p (each . T.unpack)
 {-# INLINABLE packChars #-}
 
+
+-- | Split a text stream into 'FreeT'-delimited text streams of fixed size
+chunksOf
+    :: (Monad m, Integral n)
+    => n -> Lens' (Producer Text m r) 
+                  (FreeT (Producer Text m) m r)
+chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
+  where
+    go p = do
+        x <- next p
+        return $ case x of
+            Left   r       -> PP.Pure r
+            Right (txt, p') -> PP.Free $ do
+                p'' <- (yield txt >> p') ^. splitAt n 
+                return $ PP.FreeT (go p'')
+{-# INLINABLE chunksOf #-}
+
+
 {-| Split a text stream into sub-streams delimited by characters that satisfy the
     predicate
 -}
@@ -922,43 +924,80 @@ splitsWith predicate p0 = PP.FreeT (go0 p0)
 {-# INLINABLE splitsWith #-}
 
 -- | Split a text stream using the given 'Char' as the delimiter
-split :: (Monad m)
+splits :: (Monad m)
       => Char
-      -> Producer Text m r
-      -> FreeT (Producer Text m) m r
-split c = splitsWith (c ==)
-{-# INLINABLE split #-}
+      -> Lens' (Producer Text m r)
+               (FreeT (Producer Text m) m r)
+splits c k p =
+          fmap (PP.intercalates (yield (T.singleton c))) (k (splitsWith (c ==) p))
+{-# INLINABLE splits #-}
+
+{-| Isomorphism between a stream of 'Text' and groups of equivalent 'Char's , using the
+    given equivalence relation
+-}
+groupsBy
+    :: Monad m
+    => (Char -> Char -> Bool)
+    -> Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
+groupsBy equals k p0 = fmap concats (k (PP.FreeT (go p0))) where 
+  go p = do x <- next p
+            case x of Left   r       -> return (PP.Pure r)
+                      Right (bs, p') -> case T.uncons bs of
+                             Nothing      -> go p'
+                             Just (c, _) -> do return $ PP.Free $ do
+                                                 p'' <- (yield bs >> p')^.span (equals c)
+                                                 return $ PP.FreeT (go p'')
+{-# INLINABLE groupsBy #-}
+
+
+-- | Like 'groupsBy', where the equality predicate is ('==')
+groups
+    :: Monad m
+    => Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
+groups = groupsBy (==)
+{-# INLINABLE groups #-}
+
 
 
 {-| Split a text stream into 'FreeT'-delimited lines
 -}
 lines
-    :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
-lines p0 = PP.FreeT (go0 p0)
+    :: (Monad m) => Iso' (Producer Text m r)  (FreeT (Producer Text m) m r)
+lines = Data.Profunctor.dimap _lines (fmap _unlines)
   where
-    go0 p = do
-        x <- next p
-        case x of
-            Left   r       -> return (PP.Pure r)
-            Right (txt, p') ->
-                if (T.null txt)
-                then go0 p'
-                else return $ PP.Free $ go1 (yield txt >> p')
-    go1 p = do
-        p' <- p ^. break ('\n' ==)
-        return $ PP.FreeT $ do
-            x  <- nextChar p'
-            case x of
-                Left   r      -> return $ PP.Pure r
-                Right (_, p'') -> go0 p''
+  _lines p0 = PP.FreeT (go0 p0) 
+    where
+      go0 p = do
+              x <- next p
+              case x of
+                  Left   r       -> return (PP.Pure r)
+                  Right (txt, p') ->
+                      if (T.null txt)
+                      then go0 p'
+                      else return $ PP.Free $ go1 (yield txt >> p')
+      go1 p = do
+              p' <- p ^. break ('\n' ==)
+              return $ PP.FreeT $ do
+                  x  <- nextChar p'
+                  case x of
+                      Left   r      -> return $ PP.Pure r
+                      Right (_, p'') -> go0 p''
+  -- _unlines
+  --     :: Monad m
+  --      => FreeT (Producer Text m) m x -> Producer Text m x
+  _unlines = PP.concats . PP.transFreeT addNewline
+
+  -- addNewline
+  --     :: Monad m => Producer Text m r -> Producer Text m r
+  addNewline p = p <* yield (T.singleton '\n')
 {-# INLINABLE lines #-}
 
 
 
 -- | Split a text stream into 'FreeT'-delimited words
 words
-    :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
-words = go
+    :: (Monad m) => Iso' (Producer Text m r) (FreeT (Producer Text m) m r)
+words = Data.Profunctor.dimap go (fmap _unwords)
   where
     go p = PP.FreeT $ do
         x <- next (p >-> dropWhile isSpace)
@@ -967,10 +1006,9 @@ words = go
             Right (bs, p') -> PP.Free $ do
                 p'' <-  (yield bs >> p') ^. break isSpace
                 return (go p'')
+    _unwords = PP.intercalates (yield $ T.singleton ' ')
+    
 {-# INLINABLE words #-}
-
-
-
 
 
 {-| 'intercalate' concatenates the 'FreeT'-delimited text streams after
@@ -1029,11 +1067,10 @@ unwords = intercalate (yield $ T.pack " ")
 -}
 
 {- $reexports
-    @Pipes.Text.Parse@ re-exports 'nextChar', 'drawChar', 'unDrawChar', 'peekChar', and 'isEndOfChars'.
     
     @Data.Text@ re-exports the 'Text' type.
 
-    @Pipes.Parse@ re-exports 'input', 'concat', and 'FreeT' (the type).
+    @Pipes.Parse@ re-exports 'input', 'concat', 'FreeT' (the type) and the 'Parse' synonym. 
 -}
 
 
