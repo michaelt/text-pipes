@@ -183,7 +183,7 @@ import qualified Pipes.ByteString as PB
 import qualified Pipes.Text.Internal as PE
 import Pipes.Text.Internal (Codec(..))
 import Pipes.Core (respond, Server')
-import Pipes.Group (concats, intercalates, transFreeT, FreeT(..), FreeF(..))
+import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
@@ -988,11 +988,9 @@ lines = Data.Profunctor.dimap _lines (fmap _unlines)
   -- _unlines
   --     :: Monad m
   --      => FreeT (Producer Text m) m x -> Producer Text m x
-  _unlines = concats . transFreeT addNewline
+  _unlines = concats . PG.maps (<* yield (T.singleton '\n'))
+  
 
-  -- addNewline
-  --     :: Monad m => Producer Text m r -> Producer Text m r
-  addNewline p = p <* yield (T.singleton '\n')
 {-# INLINABLE lines #-}
 
 
@@ -1061,7 +1059,7 @@ unlines = go
 -}
 unwords
     :: (Monad m) => FreeT (Producer Text m) m r -> Producer Text m r
-unwords = intercalate (yield $ T.pack " ")
+unwords = intercalate (yield $ T.singleton ' ')
 {-# INLINABLE unwords #-}
 
 {- $parse
