@@ -181,7 +181,7 @@ import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
 import qualified Pipes.Text.Internal as PE
-import Pipes.Text.Internal (Codec(..))
+import Pipes.Text.Codec (Codec(..))
 import Pipes.Core (respond, Server')
 import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
@@ -243,8 +243,8 @@ stdin = fromHandle IO.stdin
 fromHandle :: MonadIO m => IO.Handle -> Producer Text m ()
 fromHandle h =  go where
       go = do txt <- liftIO (T.hGetChunk h)
-              unless (T.null txt) $ do yield txt
-                                       go
+              unless (T.null txt) ( do yield txt
+                                       go )
 {-# INLINABLE fromHandle#-}
 
 
@@ -258,7 +258,9 @@ readFile :: MonadSafe m => FilePath -> Producer Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
 {-# INLINE readFile #-}
 
-{-| Stream lines of text from stdin (for testing in ghci etc.) 
+{-| Crudely stream lines of input from stdin in the style of Pipes.Prelude. 
+    This is for testing in ghci etc.; obviously it will be unsound if used to recieve
+    the contents of immense files with few newlines.
 
 >>> let safely = runSafeT . runEffect
 >>> safely $ for Text.stdinLn (lift . lift . print . T.length)
@@ -282,8 +284,8 @@ stdinLn = go where
 
     Unlike 'toHandle', 'stdout' gracefully terminates on a broken output pipe.
 
-    Note: For best performance, use @(for source (liftIO . putStr))@ instead of
-    @(source >-> stdout)@ in suitable cases.
+    Note: For best performance, it might be best just to use @(for source (liftIO . putStr))@ 
+    instead of @(source >-> stdout)@ .
 -}
 stdout :: MonadIO m => Consumer' Text m ()
 stdout = go
@@ -704,11 +706,8 @@ isEndOfChars = do
 {-# INLINABLE isEndOfChars #-}
 
 
-
-
-
--- | Transform a Pipe of 'ByteString's expected to be UTF-8 encoded into a Pipe of Text
--- returning a Pipe of ByteStrings that begins at the point of failure.
+-- | An improper lens into a stream of 'ByteString' expected to be UTF-8 encoded; the associated
+-- stream of Text ends by returning a stream of ByteStrings beginning at the point of failure.
 
 decodeUtf8 :: Monad m => Lens' (Producer ByteString m r) 
                                (Producer Text m (Producer ByteString m r))
@@ -716,10 +715,10 @@ decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8)))
                        (k (go B.empty PE.streamDecodeUtf8 p0)) where
   go !carry dec0 p = do 
      x <- lift (next p) 
-     case x of Left r -> if B.null carry 
-                           then return (return r)      -- all bytestrinput was consumed
-                           else return (do yield carry -- a potentially valid fragment remains
-                                           return r)
+     case x of Left r -> return (if B.null carry 
+                                    then return r -- all bytestring input was consumed
+                                    else (do yield carry -- a potentially valid fragment remains
+                                             return r))
                                            
                Right (chunk, p') -> case dec0 chunk of 
                    PE.Some text carry2 dec -> do yield text
