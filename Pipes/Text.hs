@@ -123,8 +123,23 @@ module Pipes.Text  (
     , group
     , word
     , line
+    
+    -- * Decoding Lenses 
     , decodeUtf8
-    , decode
+    , codec
+    
+    -- * Codecs
+    , utf8
+    , utf16_le
+    , utf16_be
+    , utf32_le
+    , utf32_be
+    
+    -- * Other Decoding/Encoding Functions
+    , decodeIso8859_1
+    , decodeAscii
+    , encodeIso8859_1
+    , encodeAscii
 
     -- * FreeT Splitters
     , chunksOf
@@ -170,6 +185,7 @@ import Data.Text.Lazy.Internal (foldrChunks, defaultChunkSize)
 import Data.ByteString.Unsafe (unsafeTake, unsafeDrop)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
 import Data.Char (ord, isSpace)
 import Data.Functor.Constant (Constant(Constant, getConstant))
 import Data.Functor.Identity (Identity)
@@ -181,7 +197,7 @@ import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
 import qualified Pipes.Text.Internal as PE
-import Pipes.Text.Codec (Codec(..))
+import Pipes.Text.Codec 
 import Pipes.Core (respond, Server')
 import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
@@ -1073,43 +1089,114 @@ unwords = intercalate (yield $ T.singleton ' ')
     @Pipes.Parse@ re-exports 'input', 'concat', 'FreeT' (the type) and the 'Parse' synonym. 
 -}
 
+codec :: Monad m => Codec -> Lens' (Producer ByteString m r) (Producer Text m (Producer ByteString m r))
+codec (Codec _ enc dec) k p0 = fmap (\p -> join (for p (yield . fst . enc))) 
+                                     (k (decoder (dec B.empty) p0) ) where 
+  decoder :: Monad m => PE.Decoding -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+  decoder !d p0 = case d of 
+      PE.Other txt bad      -> do yield txt
+                                  return (do yield bad
+                                             p0)
+      PE.Some txt extra dec -> do yield txt
+                                  x <- lift (next p0)
+                                  case x of Left r -> return (do yield extra
+                                                                 return r)
+                                            Right (chunk,p1) -> decoder (dec chunk) p1
+
+-- decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8))) 
+--                        (k (go B.empty PE.streamDecodeUtf8 p0)) where
+
+encodeAscii :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
+encodeAscii = go where
+  go p = do echunk <- lift (next p)
+            case echunk of 
+              Left r -> return (return r)
+              Right (chunk, p') -> 
+                 if T.null chunk 
+                   then go p'
+                   else let (safe, unsafe)  = T.span (\c -> ord c <= 0x7F) chunk
+                        in do yield (B8.pack (T.unpack safe))
+                              if T.null unsafe
+                                then go p'
+                                else return $ do yield unsafe 
+                                                 p'
+
+encodeIso8859_1 :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
+encodeIso8859_1 = go where
+  go p = do etxt <- lift (next p)
+            case etxt of 
+              Left r -> return (return r)
+              Right (txt, p') -> 
+                 if T.null txt 
+                   then go p'
+                   else let (safe, unsafe)  = T.span (\c -> ord c <= 0xFF) txt
+                        in do yield (B8.pack (T.unpack safe))
+                              if T.null unsafe
+                                then go p'
+                                else return $ do yield unsafe 
+                                                 p'
+
+decodeAscii :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+decodeAscii = go where
+  go p = do echunk <- lift (next p)
+            case echunk of 
+              Left r -> return (return r)
+              Right (chunk, p') -> 
+                 if B.null chunk 
+                   then go p'
+                   else let (safe, unsafe)  = B.span (<= 0x7F) chunk
+                        in do yield (T.pack (B8.unpack safe))
+                              if B.null unsafe
+                                then go p'
+                                else return $ do yield unsafe 
+                                                 p'
 
 
-decode :: Monad m => PE.Decoding -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
--- decode codec = go B.empty where
---   go extra p0 = 
---     do x <- lift (next p0)
---        case x of Right (chunk, p) -> 
---                     do let (text, stuff) = codecDecode codec (B.append extra chunk)
---                        yield text
---                        case stuff of Right extra' -> go extra' p
---                                      Left (exc,bs) -> do yield text
---                                                          return (do yield bs 
---                                                                     p)
---  Left r -> return (do yield extra 
---                      return r) 
+decodeIso8859_1 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+decodeIso8859_1 = go where
+  go p = do echunk <- lift (next p)
+            case echunk of 
+              Left r -> return (return r)
+              Right (chunk, p') -> 
+                 if B.null chunk 
+                   then go p'
+                   else let (safe, unsafe)  = B.span (<= 0xFF) chunk
+                        in do yield (T.pack (B8.unpack safe))
+                              if B.null unsafe
+                                then go p'
+                                else return $ do yield unsafe 
+                                                 p'
 
-decode d p0 = case d of 
-    PE.Other txt bad      -> do yield txt
-                                return (do yield bad
-                                           p0)
-    PE.Some txt extra dec -> do yield txt
-                                x <- lift (next p0)
-                                case x of Left r -> return (do yield extra
-                                                               return r)
-                                          Right (chunk,p1) -> decode (dec chunk) p1
 
--- go !carry dec0 p = do 
---    x <- lift (next p) 
---    case x of Left r -> if B.null carry 
---                          then return (return r)      -- all bytestrinput was consumed
---                          else return (do yield carry -- a potentially valid fragment remains
---                                          return r)
--- 
---              Right (chunk, p') -> case dec0 chunk of 
---                  PE.Some text carry2 dec -> do yield text
---                                                go carry2 dec p'
---                  PE.Other text bs -> do yield text 
---                                         return (do yield bs -- an invalid blob remains
---                                                    p')
--- {-# INLINABLE decodeUtf8 #-}
+
+{-
+  ascii :: Codec
+  ascii = Codec name enc (toDecoding dec) where
+      name = T.pack "ASCII"
+      enc text = (bytes, extra) where
+          (safe, unsafe) = T.span (\c -> ord c <= 0x7F) text
+          bytes = B8.pack (T.unpack safe)
+          extra = if T.null unsafe
+              then Nothing
+              else Just (EncodeException ascii (T.head unsafe), unsafe)
+
+      dec bytes = (text, extra) where
+          (safe, unsafe) = B.span (<= 0x7F) bytes
+          text = T.pack (B8.unpack safe)
+          extra = if B.null unsafe
+              then Right B.empty
+              else Left (DecodeException ascii (B.head unsafe), unsafe)
+
+  iso8859_1 :: Codec
+  iso8859_1 = Codec name enc (toDecoding dec) where
+      name = T.pack "ISO-8859-1"
+      enc text = (bytes, extra) where
+          (safe, unsafe) = T.span (\c -> ord c <= 0xFF) text
+          bytes = B8.pack (T.unpack safe)
+          extra = if T.null unsafe
+              then Nothing
+              else Just (EncodeException iso8859_1 (T.head unsafe), unsafe)
+
+      dec bytes = (T.pack (B8.unpack bytes), Right B.empty)
+-}
+                                            

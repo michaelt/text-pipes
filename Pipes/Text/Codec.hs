@@ -1,10 +1,8 @@
 
-{-# LANGUAGE DeriveDataTypeable, RankNTypes #-}
+{-# LANGUAGE DeriveDataTypeable, RankNTypes, BangPatterns #-}
 -- |
 -- Copyright: 2014 Michael Thompson, 2011 Michael Snoyman, 2010-2011 John Millikin
 -- License: MIT
---
--- Handle streams of text.
 --
 -- Parts of this code were taken from enumerator and conduits, and adapted for pipes.
 
@@ -15,6 +13,10 @@ module Pipes.Text.Codec
     , Codec(..)
     , TextException(..)
     , utf8
+    , utf16_le
+    , utf16_be
+    , utf32_le
+    , utf32_be
     ) where
 
 import Data.Bits ((.&.))
@@ -37,7 +39,7 @@ import Data.Typeable
 import Control.Arrow (first)
 import Data.Maybe (catMaybes)
 import Pipes.Text.Internal
-
+import Pipes
 -- | A specific character encoding.
 --
 -- Since 0.3.0
@@ -62,10 +64,12 @@ instance Exc.Exception TextException
 toDecoding :: (ByteString -> (Text, Either (TextException, ByteString) ByteString))
            -> (ByteString -> Decoding)
 toDecoding op = loop B.empty where
-  loop extra bs0 = case op (B.append extra bs0) of
-                    (txt, Right bs) -> Some txt bs (loop bs)
-                    (txt, Left (_,bs)) -> Other txt bs
-
+  loop !extra bs0 = case op (B.append extra bs0) of
+                      (txt, Right bs) -> Some txt bs (loop bs)
+                      (txt, Left (_,bs)) -> Other txt bs
+-- To do: toDecoding should be inlined in each of the 'Codec' definitions
+-- or else Codec changed to the conduit/enumerator definition.  We have
+-- altered it to use 'streamDecodeUtf8'
 
 splitSlowly :: (ByteString -> Text)
             -> ByteString 
@@ -87,8 +91,7 @@ utf8 :: Codec
 utf8 = Codec name enc (toDecoding dec) where
     name = T.pack "UTF-8"
     enc text = (TE.encodeUtf8 text, Nothing)
-    dec bytes = case decodeSomeUtf8 bytes of 
-      (t,b) -> (t, Right b)
+    dec bytes = case decodeSomeUtf8 bytes of (t,b) -> (t, Right b)
 
 --     -- Whether the given byte is a continuation byte.
 --     isContinuation byte = byte .&. 0xC0 == 0x80
@@ -202,34 +205,6 @@ utf32SplitBytes dec bytes = split where
         then (bytes, B.empty)
         else B.splitAt lenToDecode bytes
 
-ascii :: Codec
-ascii = Codec name enc (toDecoding dec) where
-    name = T.pack "ASCII"
-    enc text = (bytes, extra) where
-        (safe, unsafe) = T.span (\c -> ord c <= 0x7F) text
-        bytes = B8.pack (T.unpack safe)
-        extra = if T.null unsafe
-            then Nothing
-            else Just (EncodeException ascii (T.head unsafe), unsafe)
-
-    dec bytes = (text, extra) where
-        (safe, unsafe) = B.span (<= 0x7F) bytes
-        text = T.pack (B8.unpack safe)
-        extra = if B.null unsafe
-            then Right B.empty
-            else Left (DecodeException ascii (B.head unsafe), unsafe)
-
-iso8859_1 :: Codec
-iso8859_1 = Codec name enc (toDecoding dec) where
-    name = T.pack "ISO-8859-1"
-    enc text = (bytes, extra) where
-        (safe, unsafe) = T.span (\c -> ord c <= 0xFF) text
-        bytes = B8.pack (T.unpack safe)
-        extra = if T.null unsafe
-            then Nothing
-            else Just (EncodeException iso8859_1 (T.head unsafe), unsafe)
-
-    dec bytes = (T.pack (B8.unpack bytes), Right B.empty)
 
 tryEvaluate :: a -> Either Exc.SomeException a
 tryEvaluate = unsafePerformIO . Exc.try . Exc.evaluate
