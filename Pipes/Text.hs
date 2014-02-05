@@ -159,13 +159,17 @@ module Pipes.Text  (
 
    -- * Re-exports
     -- $reexports
+    , Decoding(..)
+    , streamDecodeUtf8
+    , decodeSomeUtf8
+    , Codec(..)
+    , TextException(..)
     , module Data.ByteString
     , module Data.Text
     , module Data.Profunctor
     , module Data.Word
     , module Pipes.Parse
     , module Pipes.Group
-    , module Pipes.Text.Internal
     ) where
 
 import Control.Exception (throwIO, try)
