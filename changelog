@@ -1,0 +1,7 @@
+ # Version 0.0.0.1
+
+ * Omit `stdinLn` as likely to be dangerous through misunderstanding.
+
+ * Rearrange order of 'Internal' materials.
+
+

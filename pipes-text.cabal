@@ -1,5 +1,5 @@
 name:                pipes-text
-version:             0.0.0.0
+version:             0.0.0.1
 synopsis:            Text pipes.
 description:         Many of the pipes and other operations defined here mirror those in
                      the `pipes-bytestring` library. Folds like `length` and grouping 
@@ -19,17 +19,19 @@ description:         Many of the pipes and other operations defined here mirror 
 
 homepage:            https://github.com/michaelt/text-pipes
 bug-reports:         https://github.com/michaelt/text-pipes/issues
-
 license:             BSD3
 license-file:        LICENSE
 author:              Michael Thompson
 maintainer:          what_is_it_to_do_anything@yahoo.com
 category:            Text, Pipes
-
 build-type:          Simple
 cabal-version:       >=1.10
-extra-source-files: README.md
-                    include/*.h 
+
+extra-source-files: README.md include/*.h
+source-repository head
+    type: git
+    location: https://github.com/michaelt/text-pipes
+
 
 library
   c-sources:    cbits/cbits.c
