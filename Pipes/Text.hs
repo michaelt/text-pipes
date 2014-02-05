@@ -66,11 +66,9 @@ module Pipes.Text  (
     , stdin
     , fromHandle
     , readFile
-    , stdinLn
 
     -- * Consumers
     , stdout
-    , stdoutLn
     , toHandle
     , writeFile
 
@@ -275,27 +273,6 @@ readFile :: MonadSafe m => FilePath -> Producer Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
 {-# INLINE readFile #-}
 
-{-| Crudely stream lines of input from stdin in the style of Pipes.Prelude. 
-    This is for testing in ghci etc.; obviously it will be unsound if used to recieve
-    the contents of immense files with few newlines.
-
->>> let safely = runSafeT . runEffect
->>> safely $ for Text.stdinLn (lift . lift . print . T.length)
-hello
-5
-world
-5
-
--}
-stdinLn :: MonadIO m => Producer' Text m ()
-stdinLn = go where
-    go = do
-        eof <- liftIO (IO.hIsEOF IO.stdin)
-        unless eof $ do
-            txt <- liftIO (T.hGetLine IO.stdin)
-            yield txt
-            go
-{-# INLINABLE stdinLn #-}
 
 {-| Stream text to 'stdout'
 
@@ -319,20 +296,6 @@ stdout = go
             Right () -> go
 {-# INLINABLE stdout #-}
 
-stdoutLn :: (MonadIO m) => Consumer' Text m ()
-stdoutLn = go
-  where
-    go = do
-        str <- await
-        x   <- liftIO $ try (T.putStrLn str)
-        case x of
-           Left (G.IOError { G.ioe_type  = G.ResourceVanished
-                           , G.ioe_errno = Just ioe })
-                | Errno ioe == ePIPE
-                    -> return ()
-           Left  e  -> liftIO (throwIO e)
-           Right () -> go
-{-# INLINABLE stdoutLn #-}
 
 {-| Convert a text stream into a 'Handle'
 
@@ -723,8 +686,9 @@ isEndOfChars = do
 {-# INLINABLE isEndOfChars #-}
 
 
--- | An improper lens into a stream of 'ByteString' expected to be UTF-8 encoded; the associated
--- stream of Text ends by returning a stream of ByteStrings beginning at the point of failure.
+{- | An improper lens into a stream of 'ByteString' expected to be UTF-8 encoded; the associated
+   stream of Text ends by returning a stream of ByteStrings beginning at the point of failure. 
+   -}
 
 decodeUtf8 :: Monad m => Lens' (Producer ByteString m r) 
                                (Producer Text m (Producer ByteString m r))
@@ -1010,7 +974,6 @@ lines = Data.Profunctor.dimap _lines (fmap _unlines)
 {-# INLINABLE lines #-}
 
 
-
 -- | Split a text stream into 'FreeT'-delimited words
 words
     :: (Monad m) => Iso' (Producer Text m r) (FreeT (Producer Text m) m r)
@@ -1090,6 +1053,16 @@ unwords = intercalate (yield $ T.singleton ' ')
     @Pipes.Parse@ re-exports 'input', 'concat', 'FreeT' (the type) and the 'Parse' synonym. 
 -}
 
+{- | Use a 'Codec' as a pipes-style 'Lens' into a byte stream; the available 'Codec' s are
+     'utf8', 'utf16_le', 'utf16_be', 'utf32_le', 'utf32_be' . The 'Codec' concept and the 
+     individual 'Codec' definitions follow the enumerator and conduit libraries. 
+     
+     Utf8 is handled differently in this library -- without the use of 'unsafePerformIO' &co 
+     to catch 'Text' exceptions; but the same 'mypipe ^. codec utf8' interface can be used.
+     'mypipe ^. decodeUtf8' should be the same, but has a somewhat more direct and thus perhaps
+     better implementation.  
+
+     -}
 codec :: Monad m => Codec -> Lens' (Producer ByteString m r) (Producer Text m (Producer ByteString m r))
 codec (Codec _ enc dec) k p0 = fmap (\p -> join (for p (yield . fst . enc))) 
                                      (k (decoder (dec B.empty) p0) ) where 
@@ -1104,9 +1077,13 @@ codec (Codec _ enc dec) k p0 = fmap (\p -> join (for p (yield . fst . enc)))
                                                                  return r)
                                             Right (chunk,p1) -> decoder (dec chunk) p1
 
--- decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8))) 
---                        (k (go B.empty PI.streamDecodeUtf8 p0)) where
+{- | ascii and latin encodings only represent a small fragment of 'Text'; thus we cannot
+     use the pipes 'Lens' style to work with them. Rather we simply define functions 
+     each way. 
 
+     'encodeAscii' : Reduce as much of your stream of 'Text' actually is ascii to a byte stream,
+     returning the rest of the 'Text' at the first non-ascii 'Char'
+-}
 encodeAscii :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
 encodeAscii = go where
   go p = do echunk <- lift (next p)
@@ -1121,7 +1098,9 @@ encodeAscii = go where
                                 then go p'
                                 else return $ do yield unsafe 
                                                  p'
-
+{- | Reduce as much of your stream of 'Text' actually is iso8859 or latin1 to a byte stream,
+     returning the rest of the 'Text' upon hitting any non-latin 'Char'
+   -}
 encodeIso8859_1 :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
 encodeIso8859_1 = go where
   go p = do etxt <- lift (next p)
@@ -1137,6 +1116,9 @@ encodeIso8859_1 = go where
                                 else return $ do yield unsafe 
                                                  p'
 
+{- | Reduce a byte stream to a corresponding stream of ascii chars, returning the
+     unused 'ByteString' upon hitting an un-ascii byte.
+   -}
 decodeAscii :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
 decodeAscii = go where
   go p = do echunk <- lift (next p)
@@ -1152,7 +1134,9 @@ decodeAscii = go where
                                 else return $ do yield unsafe 
                                                  p'
 
-
+{- | Reduce a byte stream to a corresponding stream of ascii chars, returning the
+     unused 'ByteString' upon hitting the rare un-latinizable byte.
+     -}
 decodeIso8859_1 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
 decodeIso8859_1 = go where
   go p = do echunk <- lift (next p)
@@ -1170,34 +1154,5 @@ decodeIso8859_1 = go where
 
 
 
-{-
-  ascii :: Codec
-  ascii = Codec name enc (toDecoding dec) where
-      name = T.pack "ASCII"
-      enc text = (bytes, extra) where
-          (safe, unsafe) = T.span (\c -> ord c <= 0x7F) text
-          bytes = B8.pack (T.unpack safe)
-          extra = if T.null unsafe
-              then Nothing
-              else Just (EncodeException ascii (T.head unsafe), unsafe)
 
-      dec bytes = (text, extra) where
-          (safe, unsafe) = B.span (<= 0x7F) bytes
-          text = T.pack (B8.unpack safe)
-          extra = if B.null unsafe
-              then Right B.empty
-              else Left (DecodeException ascii (B.head unsafe), unsafe)
-
-  iso8859_1 :: Codec
-  iso8859_1 = Codec name enc (toDecoding dec) where
-      name = T.pack "ISO-8859-1"
-      enc text = (bytes, extra) where
-          (safe, unsafe) = T.span (\c -> ord c <= 0xFF) text
-          bytes = B8.pack (T.unpack safe)
-          extra = if T.null unsafe
-              then Nothing
-              else Just (EncodeException iso8859_1 (T.head unsafe), unsafe)
-
-      dec bytes = (T.pack (B8.unpack bytes), Right B.empty)
--}
                                             
