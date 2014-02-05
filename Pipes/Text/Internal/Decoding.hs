@@ -2,9 +2,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, MagicHash, UnliftedFFITypes #-}
 {-# LANGUAGE DeriveDataTypeable, RankNTypes #-}
 
--- This module lifts assorted materials from Brian O'Sullivan's text package 
--- especially Data.Text.Encoding in order to define a pipes-appropriate
--- streamDecodeUtf8
+{- |
+This module lifts assorted materials from Brian O'Sullivan's text package 
+especially @Data.Text.Encoding@ in order to define a pipes-appropriate
+'streamDecodeUtf8'
+-} 
 module Pipes.Text.Internal.Decoding 
     ( Decoding(..)
     , streamDecodeUtf8
@@ -41,9 +43,9 @@ import Data.Maybe (catMaybes)
 
 
 
--- | A stream oriented decoding result.
-data Decoding = Some Text ByteString (ByteString -> Decoding)
-              | Other Text ByteString
+-- | A stream oriented decoding result. Distinct from the similar type in @Data.Text.Encoding@
+data Decoding = Some Text ByteString (ByteString -> Decoding) -- | Text, continuation and any undecoded fragment.
+              | Other Text ByteString  -- | Text followed by an undecodable ByteString
 instance Show Decoding where
     showsPrec d (Some t bs _) = showParen (d > prec) $
                                 showString "Some " . showsPrec prec' t .
@@ -59,6 +61,7 @@ instance Show Decoding where
 newtype CodePoint = CodePoint Word32 deriving (Eq, Show, Num, Storable)
 newtype DecoderState = DecoderState Word32 deriving (Eq, Show, Num, Storable)
 
+-- | Resolve a 'ByteString' into 'Text' and a continuation that can handle further 'ByteStrings'. 
 streamDecodeUtf8 :: ByteString -> Decoding
 streamDecodeUtf8 = decodeChunkUtf8 B.empty 0 0 
   where
@@ -92,6 +95,7 @@ streamDecodeUtf8 = decodeChunkUtf8 B.empty 0 0
   {-# INLINE decodeChunkUtf8 #-}
 {-# INLINE streamDecodeUtf8 #-}
 
+-- | Resolve a ByteString into an initial segment of intelligible 'Text' and whatever is unintelligble
 decodeSomeUtf8 :: ByteString -> (Text, ByteString)
 decodeSomeUtf8 bs@(PS fp off len) = runST $ do 
   dest <- A.new (len+1) 
