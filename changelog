@@ -1,3 +1,18 @@
+ # Version 0.0.0.5
+ 
+ * Rearranged internal modules
+
+
+ # Version 0.0.0.4
+
+ * Altered bad haddock markup
+
+
+ # Version 0.0.0.3
+ 
+ * Actually added changelog
+
+
  # Version 0.0.0.2
 
  * Omit `stdinLn` as likely to be dangerous through misunderstanding.

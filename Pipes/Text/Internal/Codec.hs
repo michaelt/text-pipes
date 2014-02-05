@@ -4,17 +4,15 @@
 -- Copyright: 2014 Michael Thompson, 2011 Michael Snoyman, 2010-2011 John Millikin
 -- License: MIT
 --  This Parts of this code were taken from enumerator and conduits, and adapted for pipes
-{- | This module follows the model of the enumerator and conduits libraries, and defines
-     'Codec' s for various encodings. Note that we do not export a 'Codec' for ascii and 
-     iso8859_1. A 'Lens' in the sense of the pipes library cannot be defined for these, so
-     special functions appear in @Pipes.Text@
--}
+
+-- This module follows the model of the enumerator and conduits libraries, and defines
+-- 'Codec' s for various encodings. Note that we do not export a 'Codec' for ascii and 
+-- iso8859_1. A 'Lens' in the sense of the pipes library cannot be defined for these, so
+-- special functions appear in @Pipes.Text@
+
 
 module Pipes.Text.Internal.Codec
-    ( Decoding(..)
-    , streamDecodeUtf8
-    , decodeSomeUtf8
-    , Codec(..)
+    ( Codec(..)
     , TextException(..)
     , utf8
     , utf16_le
