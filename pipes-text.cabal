@@ -1,13 +1,15 @@
 name:                pipes-text
-version:             0.1.0.0
+version:             0.0.1.0
 synopsis:            Text pipes.
-description:         Most of the pipes and other operations defined in `pipes-text` 
-                     closely mirrors the `pipes-bytestring` library, simply adjusting for
-                     the difference between strict `ByteString` and strict `Text`, and between
-                     `Word8` and `Char`. To this core are added some simple functions 
-                     some akin to the `String` operations in `Pipes.Prelude`, some like the
-                     utilities in `Data.Text`.  
-                     
+description:         Many of the pipes and other operations defined here mirror those in
+                     the `pipes-bytestring` library. Folds like `length` and grouping 
+                     operations like `lines` simply  adjust for the differences between 
+                     `ByteString` and `Text` and `Word8` and `Char`. The distinctive feature
+                     of the library is the `Text/ByteString` encoding and decoding apparatus.
+                     .
+                     To this core are added some simple functions akin to the `String` 
+                     operations in `Pipes.Prelude`, and others like the utilities in `Data.Text`.  
+                     .
                      All of the `IO` operations defined here - e.g `readFile`, `stdout` etc. 
                      - are conveniences akin to those in `Data.Text.IO` which e.g. try to 
                      find the system encoding and use the exceptions defined in the `text`
@@ -15,12 +17,15 @@ description:         Most of the pipes and other operations defined in `pipes-te
                      `pipes-bytestring` in conjuntion with 'pure' operations like 
                      `decodeUtf8` and `encodeUtf8` that are defined here. 
 
-homepage:            github.com/michaelt/text-pipes
+homepage:            https://github.com/michaelt/text-pipes
+bug-reports:         https://github.com/michaelt/text-pipes/issues
+
 license:             BSD3
 license-file:        LICENSE
 author:              Michael Thompson
 maintainer:          what_is_it_to_do_anything@yahoo.com
 category:            Text, Pipes
+
 build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files: README.md
@@ -34,7 +39,7 @@ library
   other-extensions:    RankNTypes
   build-depends:       base         >= 4       && < 5  ,
                        bytestring >=0.10       && < 0.11,
-                       text >=0.11             && < 0.12,
+                       text >=0.11             && < 1.2,
                        profunctors  >= 3.1.1   && < 4.1 ,
                        pipes >=4.0             && < 4.2,
                        pipes-group  >= 1.0.0   && < 1.1 ,
