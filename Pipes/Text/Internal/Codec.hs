@@ -3,8 +3,12 @@
 -- |
 -- Copyright: 2014 Michael Thompson, 2011 Michael Snoyman, 2010-2011 John Millikin
 -- License: MIT
---
--- Parts of this code were taken from enumerator and conduits, and adapted for pipes.
+--  This Parts of this code were taken from enumerator and conduits, and adapted for pipes
+{- | This module follows the model of the enumerator and conduits libraries, and defines
+     'Codec' s for various encodings. Note that we do not export a 'Codec' for ascii and 
+     iso8859_1. A 'Lens' in the sense of the pipes library cannot be defined for these, so
+     special functions appear in @Pipes.Text@
+-}
 
 module Pipes.Text.Internal.Codec
     ( Decoding(..)
@@ -41,12 +45,11 @@ import Data.Maybe (catMaybes)
 import Pipes.Text.Internal.Decoding
 import Pipes
 -- | A specific character encoding.
---
--- Since 0.3.0
+
 data Codec = Codec
   { codecName :: Text
   , codecEncode :: Text -> (ByteString, Maybe (TextException, Text))
-  , codecDecode :: ByteString -> Decoding -- (Text, Either (TextException, ByteString) ByteString)
+  , codecDecode :: ByteString -> Decoding 
   }
 
 instance Show Codec where
