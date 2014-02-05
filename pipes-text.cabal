@@ -1,13 +1,17 @@
 name:                pipes-text
-version:             0.0.0.1
+version:             0.0.0.2
 synopsis:            Text pipes.
 description:         Many of the pipes and other operations defined here mirror those in
                      the `pipes-bytestring` library. Folds like `length` and grouping 
                      operations like `lines` simply  adjust for the differences between 
-                     `ByteString` and `Text` and `Word8` and `Char`. The distinctive feature
-                     of the library is the `Text/ByteString` encoding and decoding apparatus.
+                     `ByteString` and `Text` and `Word8` and `Char`. It is hoped that this
+                     homogeneity will aid in learning the terms and programming style associated
+                     with both of them.  
                      .
-                     To this core are added some simple functions akin to the `String` 
+                     The most distinctive addition of the library to that core is the 
+                     apparatus for encoding and decoding `Text` and `ByteString`.
+                     .
+                     Also defined are some simple functions akin to the `String` 
                      operations in `Pipes.Prelude`, and others like the utilities in `Data.Text`.  
                      .
                      All of the `IO` operations defined here - e.g `readFile`, `stdout` etc. 
