@@ -167,6 +167,7 @@ module Pipes.Text  (
     , module Data.Word
     , module Pipes.Parse
     , module Pipes.Group
+    , module Pipes.Text.Internal.Codec
     ) where
 
 import Control.Exception (throwIO, try)
@@ -196,8 +197,8 @@ import Foreign.C.Error (Errno(Errno), ePIPE)
 import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
-import qualified Pipes.Text.Internal as PE
-import Pipes.Text.Codec 
+import qualified Pipes.Text.Internal.Decoding as PE
+import Pipes.Text.Internal.Codec 
 import Pipes.Core (respond, Server')
 import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG

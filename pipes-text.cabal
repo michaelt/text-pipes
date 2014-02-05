@@ -1,20 +1,35 @@
 name:                pipes-text
 version:             0.1.0.0
 synopsis:            Text pipes.
-description:         Text pipes.
+description:         Most of the pipes and other operations defined in `pipes-text` 
+                     closely mirrors the `pipes-bytestring` library, simply adjusting for
+                     the difference between strict `ByteString` and strict `Text`, and between
+                     `Word8` and `Char`. To this core are added some simple functions 
+                     some akin to the `String` operations in `Pipes.Prelude`, some like the
+                     utilities in `Data.Text`.  
+                     
+                     All of the `IO` operations defined here - e.g `readFile`, `stdout` etc. 
+                     - are conveniences akin to those in `Data.Text.IO` which e.g. try to 
+                     find the system encoding and use the exceptions defined in the `text`
+                     library. Proper `IO` in the sense of this library will employ 
+                     `pipes-bytestring` in conjuntion with 'pure' operations like 
+                     `decodeUtf8` and `encodeUtf8` that are defined here. 
+
 homepage:            github.com/michaelt/text-pipes
 license:             BSD3
 license-file:        LICENSE
-author:              michaelt
+author:              Michael Thompson
 maintainer:          what_is_it_to_do_anything@yahoo.com
-category:            Text
+category:            Text, Pipes
 build-type:          Simple
 cabal-version:       >=1.10
+extra-source-files: README.md
+                    include/*.h 
 
 library
   c-sources:    cbits/cbits.c
   include-dirs: include
-  exposed-modules:     Pipes.Text, Pipes.Text.Internal, Pipes.Text.Codec
+  exposed-modules:     Pipes.Text, Pipes.Text.Internal.Decoding, Pipes.Text.Internal.Codec
   -- other-modules:       
   other-extensions:    RankNTypes
   build-depends:       base         >= 4       && < 5  ,
