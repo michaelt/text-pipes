@@ -1,5 +1,5 @@
 name:                pipes-text
-version:             0.0.1.0
+version:             0.0.0.0
 synopsis:            Text pipes.
 description:         Many of the pipes and other operations defined here mirror those in
                      the `pipes-bytestring` library. Folds like `length` and grouping 
@@ -34,8 +34,8 @@ extra-source-files: README.md
 library
   c-sources:    cbits/cbits.c
   include-dirs: include
-  exposed-modules:     Pipes.Text, Pipes.Text.Internal.Decoding, Pipes.Text.Internal.Codec
-  -- other-modules:       
+  exposed-modules:     Pipes.Text, Pipes.Text.Internal
+  other-modules:       Pipes.Text.Internal.Decoding, Pipes.Text.Internal.Codec
   other-extensions:    RankNTypes
   build-depends:       base         >= 4       && < 5  ,
                        bytestring >=0.10       && < 0.11,

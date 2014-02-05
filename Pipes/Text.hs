@@ -167,7 +167,7 @@ module Pipes.Text  (
     , module Data.Word
     , module Pipes.Parse
     , module Pipes.Group
-    , module Pipes.Text.Internal.Codec
+    , module Pipes.Text.Internal
     ) where
 
 import Control.Exception (throwIO, try)
@@ -197,8 +197,8 @@ import Foreign.C.Error (Errno(Errno), ePIPE)
 import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
-import qualified Pipes.Text.Internal.Decoding as PE
-import Pipes.Text.Internal.Codec 
+import qualified Pipes.Text.Internal as PI
+import Pipes.Text.Internal 
 import Pipes.Core (respond, Server')
 import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
@@ -729,7 +729,7 @@ isEndOfChars = do
 decodeUtf8 :: Monad m => Lens' (Producer ByteString m r) 
                                (Producer Text m (Producer ByteString m r))
 decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8))) 
-                       (k (go B.empty PE.streamDecodeUtf8 p0)) where
+                       (k (go B.empty PI.streamDecodeUtf8 p0)) where
   go !carry dec0 p = do 
      x <- lift (next p) 
      case x of Left r -> return (if B.null carry 
@@ -738,9 +738,9 @@ decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8)))
                                              return r))
                                            
                Right (chunk, p') -> case dec0 chunk of 
-                   PE.Some text carry2 dec -> do yield text
+                   PI.Some text carry2 dec -> do yield text
                                                  go carry2 dec p'
-                   PE.Other text bs -> do yield text 
+                   PI.Other text bs -> do yield text 
                                           return (do yield bs -- an invalid blob remains
                                                      p')
 {-# INLINABLE decodeUtf8 #-}
@@ -1093,19 +1093,19 @@ unwords = intercalate (yield $ T.singleton ' ')
 codec :: Monad m => Codec -> Lens' (Producer ByteString m r) (Producer Text m (Producer ByteString m r))
 codec (Codec _ enc dec) k p0 = fmap (\p -> join (for p (yield . fst . enc))) 
                                      (k (decoder (dec B.empty) p0) ) where 
-  decoder :: Monad m => PE.Decoding -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+  decoder :: Monad m => PI.Decoding -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
   decoder !d p0 = case d of 
-      PE.Other txt bad      -> do yield txt
+      PI.Other txt bad      -> do yield txt
                                   return (do yield bad
                                              p0)
-      PE.Some txt extra dec -> do yield txt
+      PI.Some txt extra dec -> do yield txt
                                   x <- lift (next p0)
                                   case x of Left r -> return (do yield extra
                                                                  return r)
                                             Right (chunk,p1) -> decoder (dec chunk) p1
 
 -- decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8))) 
---                        (k (go B.empty PE.streamDecodeUtf8 p0)) where
+--                        (k (go B.empty PI.streamDecodeUtf8 p0)) where
 
 encodeAscii :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
 encodeAscii = go where
