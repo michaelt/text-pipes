@@ -1,7 +1,5 @@
-{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, CPP #-}
-#if __GLASGOW_HASKELL__ >= 702
-{-# LANGUAGE Trustworthy #-}
-#endif
+{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Trustworthy #-}
+
 {-| This module provides @pipes@ utilities for \"text streams\", which are
     streams of 'Text' chunks. The individual chunks are uniformly @strict@, but 
     a 'Producer' can be converted to and from lazy 'Text's, though this is generally 
