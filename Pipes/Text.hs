@@ -29,11 +29,11 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 > main = runSafeT $ runEffect $ Text.readFile "inFile.txt" >-> Text.writeFile "outFile.txt"
 
     You can stream to and from 'stdin' and 'stdout' using the predefined 'stdin'
-    and 'stdout' proxies, as with the following \"echo\" program:
+    and 'stdout' pipes, as with the following \"echo\" program:
 
 > main = runEffect $ Text.stdin >-> Text.stdout
 
-    You can also translate pure lazy 'TL.Text's to and from proxies:
+    You can also translate pure lazy 'TL.Text's to and from pipes:
 
 > main = runEffect $ Text.fromLazy (TL.pack "Hello, world!\n") >-> Text.stdout
 
