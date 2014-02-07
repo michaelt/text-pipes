@@ -485,13 +485,15 @@ filter predicate = P.map (T.filter predicate)
 scan
     :: (Monad m)
     => (Char -> Char -> Char) -> Char -> Pipe Text Text m r
-scan step begin = go begin
+scan step begin = do
+    yield (T.singleton begin)
+    go begin
   where
     go c = do
         txt <- await
         let txt' = T.scanl step c txt
             c' = T.last txt'
-        yield txt'
+        yield (T.tail txt')
         go c'
 {-# INLINABLE scan #-}
 
