@@ -10,7 +10,8 @@
     example, the following program copies a document from one file to another:
 
 > import Pipes
-> import qualified Data.Text.Pipes as Text
+> import qualified Pipes.Text as Text
+> import qualified Pipes.Text.IO as Text
 > import System.IO
 >
 > main =
@@ -21,7 +22,8 @@
 To stream from files, the following is perhaps more Prelude-like (note that it uses Pipes.Safe):
 
 > import Pipes
-> import qualified Data.Text.Pipes as Text
+> import qualified Pipes.Text as Text
+> import qualified Pipes.Text.IO as Text
 > import Pipes.Safe
 >
 > main = runSafeT $ runEffect $ Text.readFile "inFile.txt" >-> Text.writeFile "outFile.txt"
@@ -61,14 +63,14 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 module Pipes.Text  (
     -- * Producers
       fromLazy
-    , stdin
-    , fromHandle
-    , readFile
+    -- , stdin
+    -- , fromHandle
+    -- , readFile
 
     -- * Consumers
-    , stdout
-    , toHandle
-    , writeFile
+    -- , stdout
+    -- , toHandle
+    -- , writeFile
 
     -- * Pipes
     , map
@@ -79,7 +81,7 @@ module Pipes.Text  (
     , dropWhile
     , filter
     , scan
-    , encodeUtf8
+--    , encodeUtf8
     , pack
     , unpack
     , toCaseFold
@@ -120,22 +122,22 @@ module Pipes.Text  (
     , word
     , line
     
-    -- * Decoding Lenses 
-    , decodeUtf8
-    , codec
-    
-    -- * Codecs
-    , utf8
-    , utf16_le
-    , utf16_be
-    , utf32_le
-    , utf32_be
-    
-    -- * Other Decoding/Encoding Functions
-    , decodeIso8859_1
-    , decodeAscii
-    , encodeIso8859_1
-    , encodeAscii
+    -- -- * Decoding Lenses 
+    -- , decodeUtf8
+    -- , codec
+    -- 
+    -- -- * Codecs
+    -- , utf8
+    -- , utf16_le
+    -- , utf16_be
+    -- , utf32_le
+    -- , utf32_be
+    -- 
+    -- -- * Other Decoding/Encoding Functions
+    -- , decodeIso8859_1
+    -- , decodeAscii
+    -- , encodeIso8859_1
+    -- , encodeAscii
 
     -- * FreeT Splitters
     , chunksOf
@@ -157,11 +159,9 @@ module Pipes.Text  (
 
    -- * Re-exports
     -- $reexports
-    , Decoding(..)
-    , streamDecodeUtf8
-    , decodeSomeUtf8
-    , Codec(..)
-    , TextException(..)
+    -- , DecodeResult(..)
+    -- , Codec
+    -- , TextException(..)
     , module Data.ByteString
     , module Data.Text
     , module Data.Profunctor
@@ -170,7 +170,6 @@ module Pipes.Text  (
     , module Pipes.Group
     ) where
 
-import Control.Exception (throwIO, try)
 import Control.Applicative ((<*)) 
 import Control.Monad (liftM, unless, join)
 import Control.Monad.Trans.State.Strict (StateT(..), modify)
@@ -193,24 +192,20 @@ import Data.Functor.Identity (Identity)
 import Data.Profunctor (Profunctor)
 import qualified Data.Profunctor
 import qualified Data.List as List
-import Foreign.C.Error (Errno(Errno), ePIPE)
-import qualified GHC.IO.Exception as G
 import Pipes
 import qualified Pipes.ByteString as PB
-import qualified Pipes.Text.Internal as PI
-import Pipes.Text.Internal 
+-- import Pipes.Text.Decoding
 import Pipes.Core (respond, Server')
 import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
-import qualified Pipes.Safe.Prelude as Safe
-import qualified Pipes.Safe as Safe
-import Pipes.Safe (MonadSafe(..), Base(..))
+
 import qualified Pipes.Prelude as P
 import qualified System.IO as IO
 import Data.Char (isSpace)
 import Data.Word (Word8)
+import Data.Text.StreamDecoding
 
 import Prelude hiding (
     all,
@@ -245,78 +240,6 @@ import Prelude hiding (
 fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
 fromLazy  = foldrChunks (\e a -> yield e >> a) (return ()) 
 {-# INLINE fromLazy #-}
-
--- | Stream text from 'stdin'
-stdin :: MonadIO m => Producer Text m ()
-stdin = fromHandle IO.stdin
-{-# INLINE stdin #-}
-
-{-| Convert a 'IO.Handle' into a text stream using a text size 
-    determined by the good sense of the text library; note that this
-    is distinctly slower than @decideUtf8 (Pipes.ByteString.fromHandle h)@
-    but uses the system encoding and has other `Data.Text.IO` features
--}
-
-fromHandle :: MonadIO m => IO.Handle -> Producer Text m ()
-fromHandle h =  go where
-      go = do txt <- liftIO (T.hGetChunk h)
-              unless (T.null txt) ( do yield txt
-                                       go )
-{-# INLINABLE fromHandle#-}
-
-
-{-| Stream text from a file in the simple fashion of @Data.Text.IO@ 
-
->>> runSafeT $ runEffect $ Text.readFile "hello.hs" >-> Text.map toUpper >-> hoist lift Text.stdout
-MAIN = PUTSTRLN "HELLO WORLD"
--}
-
-readFile :: MonadSafe m => FilePath -> Producer Text m ()
-readFile file = Safe.withFile file IO.ReadMode fromHandle
-{-# INLINE readFile #-}
-
-
-{-| Stream text to 'stdout'
-
-    Unlike 'toHandle', 'stdout' gracefully terminates on a broken output pipe.
-
-    Note: For best performance, it might be best just to use @(for source (liftIO . putStr))@ 
-    instead of @(source >-> stdout)@ .
--}
-stdout :: MonadIO m => Consumer' Text m ()
-stdout = go
-  where
-    go = do
-        txt <- await
-        x  <- liftIO $ try (T.putStr txt)
-        case x of
-            Left (G.IOError { G.ioe_type  = G.ResourceVanished
-                            , G.ioe_errno = Just ioe })
-                 | Errno ioe == ePIPE
-                     -> return ()
-            Left  e  -> liftIO (throwIO e)
-            Right () -> go
-{-# INLINABLE stdout #-}
-
-
-{-| Convert a text stream into a 'Handle'
-
-    Note: again, for best performance, where possible use 
-    @(for source (liftIO . hPutStr handle))@ instead of @(source >-> toHandle handle)@.
--}
-toHandle :: MonadIO m => IO.Handle -> Consumer' Text m r
-toHandle h = for cat (liftIO . T.hPutStr h)
-{-# INLINABLE toHandle #-}
-
-{-# RULES "p >-> toHandle h" forall p h .
-        p >-> toHandle h = for p (\txt -> liftIO (T.hPutStr h txt))
-  #-}
-
-
--- | Stream text into a file. Uses @pipes-safe@.
-writeFile :: (MonadSafe m) => FilePath -> Consumer' Text m ()
-writeFile file = Safe.withFile file IO.WriteMode toHandle
-{-# INLINE writeFile #-}
 
 
 type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
@@ -690,28 +613,6 @@ isEndOfChars = do
 {-# INLINABLE isEndOfChars #-}
 
 
-{- | An improper lens into a stream of 'ByteString' expected to be UTF-8 encoded; the associated
-   stream of Text ends by returning a stream of ByteStrings beginning at the point of failure. 
-   -}
-
-decodeUtf8 :: Monad m => Lens' (Producer ByteString m r) 
-                               (Producer Text m (Producer ByteString m r))
-decodeUtf8 k p0 = fmap (\p -> join  (for p (yield . TE.encodeUtf8))) 
-                       (k (go B.empty PI.streamDecodeUtf8 p0)) where
-  go !carry dec0 p = do 
-     x <- lift (next p) 
-     case x of Left r -> return (if B.null carry 
-                                    then return r -- all bytestring input was consumed
-                                    else (do yield carry -- a potentially valid fragment remains
-                                             return r))
-                                           
-               Right (chunk, p') -> case dec0 chunk of 
-                   PI.Some text carry2 dec -> do yield text
-                                                 go carry2 dec p'
-                   PI.Other text bs -> do yield text 
-                                          return (do yield bs -- an invalid blob remains
-                                                     p')
-{-# INLINABLE decodeUtf8 #-}
 
 
 -- | Splits a 'Producer' after the given number of characters
@@ -1057,106 +958,4 @@ unwords = intercalate (yield $ T.singleton ' ')
     @Pipes.Parse@ re-exports 'input', 'concat', 'FreeT' (the type) and the 'Parse' synonym. 
 -}
 
-{- | Use a 'Codec' as a pipes-style 'Lens' into a byte stream; the available 'Codec' s are
-     'utf8', 'utf16_le', 'utf16_be', 'utf32_le', 'utf32_be' . The 'Codec' concept and the 
-     individual 'Codec' definitions follow the enumerator and conduit libraries. 
-     
-     Utf8 is handled differently in this library -- without the use of 'unsafePerformIO' &co 
-     to catch 'Text' exceptions; but the same 'mypipe ^. codec utf8' interface can be used.
-     'mypipe ^. decodeUtf8' should be the same, but has a somewhat more direct and thus perhaps
-     better implementation.  
 
-     -}
-codec :: Monad m => Codec -> Lens' (Producer ByteString m r) (Producer Text m (Producer ByteString m r))
-codec (Codec _ enc dec) k p0 = fmap (\p -> join (for p (yield . fst . enc))) 
-                                     (k (decoder (dec B.empty) p0) ) where 
-  decoder :: Monad m => PI.Decoding -> Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-  decoder !d p0 = case d of 
-      PI.Other txt bad      -> do yield txt
-                                  return (do yield bad
-                                             p0)
-      PI.Some txt extra dec -> do yield txt
-                                  x <- lift (next p0)
-                                  case x of Left r -> return (do yield extra
-                                                                 return r)
-                                            Right (chunk,p1) -> decoder (dec chunk) p1
-
-{- | ascii and latin encodings only represent a small fragment of 'Text'; thus we cannot
-     use the pipes 'Lens' style to work with them. Rather we simply define functions 
-     each way. 
-
-     'encodeAscii' : Reduce as much of your stream of 'Text' actually is ascii to a byte stream,
-     returning the rest of the 'Text' at the first non-ascii 'Char'
--}
-encodeAscii :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
-encodeAscii = go where
-  go p = do echunk <- lift (next p)
-            case echunk of 
-              Left r -> return (return r)
-              Right (chunk, p') -> 
-                 if T.null chunk 
-                   then go p'
-                   else let (safe, unsafe)  = T.span (\c -> ord c <= 0x7F) chunk
-                        in do yield (B8.pack (T.unpack safe))
-                              if T.null unsafe
-                                then go p'
-                                else return $ do yield unsafe 
-                                                 p'
-{- | Reduce as much of your stream of 'Text' actually is iso8859 or latin1 to a byte stream,
-     returning the rest of the 'Text' upon hitting any non-latin 'Char'
-   -}
-encodeIso8859_1 :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
-encodeIso8859_1 = go where
-  go p = do etxt <- lift (next p)
-            case etxt of 
-              Left r -> return (return r)
-              Right (txt, p') -> 
-                 if T.null txt 
-                   then go p'
-                   else let (safe, unsafe)  = T.span (\c -> ord c <= 0xFF) txt
-                        in do yield (B8.pack (T.unpack safe))
-                              if T.null unsafe
-                                then go p'
-                                else return $ do yield unsafe 
-                                                 p'
-
-{- | Reduce a byte stream to a corresponding stream of ascii chars, returning the
-     unused 'ByteString' upon hitting an un-ascii byte.
-   -}
-decodeAscii :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeAscii = go where
-  go p = do echunk <- lift (next p)
-            case echunk of 
-              Left r -> return (return r)
-              Right (chunk, p') -> 
-                 if B.null chunk 
-                   then go p'
-                   else let (safe, unsafe)  = B.span (<= 0x7F) chunk
-                        in do yield (T.pack (B8.unpack safe))
-                              if B.null unsafe
-                                then go p'
-                                else return $ do yield unsafe 
-                                                 p'
-
-{- | Reduce a byte stream to a corresponding stream of ascii chars, returning the
-     unused 'ByteString' upon hitting the rare un-latinizable byte.
-     -}
-decodeIso8859_1 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeIso8859_1 = go where
-  go p = do echunk <- lift (next p)
-            case echunk of 
-              Left r -> return (return r)
-              Right (chunk, p') -> 
-                 if B.null chunk 
-                   then go p'
-                   else let (safe, unsafe)  = B.span (<= 0xFF) chunk
-                        in do yield (T.pack (B8.unpack safe))
-                              if B.null unsafe
-                                then go p'
-                                else return $ do yield unsafe 
-                                                 p'
-
-
-
-
-                                            
