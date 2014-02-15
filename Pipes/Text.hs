@@ -62,15 +62,7 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 
 module Pipes.Text  (
     -- * Producers
-      fromLazy
-    -- , stdin
-    -- , fromHandle
-    -- , readFile
-
-    -- * Consumers
-    -- , stdout
-    -- , toHandle
-    -- , writeFile
+    fromLazy
 
     -- * Pipes
     , map
@@ -81,7 +73,6 @@ module Pipes.Text  (
     , dropWhile
     , filter
     , scan
---    , encodeUtf8
     , pack
     , unpack
     , toCaseFold
@@ -121,30 +112,13 @@ module Pipes.Text  (
     , group
     , word
     , line
-    
-    -- -- * Decoding Lenses 
-    -- , decodeUtf8
-    -- , codec
-    -- 
-    -- -- * Codecs
-    -- , utf8
-    -- , utf16_le
-    -- , utf16_be
-    -- , utf32_le
-    -- , utf32_be
-    -- 
-    -- -- * Other Decoding/Encoding Functions
-    -- , decodeIso8859_1
-    -- , decodeAscii
-    -- , encodeIso8859_1
-    -- , encodeAscii
 
     -- * FreeT Splitters
     , chunksOf
     , splitsWith
     , splits
---  , groupsBy
---  , groups
+    , groupsBy
+    , groups
     , lines
     , words
 
@@ -157,11 +131,8 @@ module Pipes.Text  (
     , unlines
     , unwords
 
-   -- * Re-exports
+    -- * Re-exports
     -- $reexports
-    -- , DecodeResult(..)
-    -- , Codec
-    -- , TextException(..)
     , module Data.ByteString
     , module Data.Text
     , module Data.Profunctor
@@ -188,6 +159,7 @@ import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
 import qualified Pipes.Prelude as P
 import Data.Char (isSpace)
+import Data.Word (Word8)
 
 import Prelude hiding (
     all,
@@ -251,16 +223,6 @@ concatMap f = P.map (T.concatMap f)
         p >-> concatMap f = for p (\txt -> yield (T.concatMap f txt))
   #-}
 
--- | Transform a Pipe of 'Text' into a Pipe of 'ByteString's using UTF-8
--- encoding; @encodeUtf8 = Pipes.Prelude.map TE.encodeUtf8@ so more complex
--- encoding pipes can easily be constructed with the functions in @Data.Text.Encoding@
--- encodeUtf8 :: Monad m => Pipe Text ByteString m r
--- encodeUtf8 = P.map TE.encodeUtf8
--- {-# INLINEABLE encodeUtf8 #-}
--- 
--- {-# RULES "p >-> encodeUtf8" forall p .
---         p >-> encodeUtf8 = for p (\txt -> yield (TE.encodeUtf8 txt))
---   #-}
 
 -- | Transform a Pipe of 'String's into one of 'Text' chunks
 pack :: Monad m => Pipe String Text m r
@@ -496,7 +458,6 @@ minimum = P.fold step Nothing id
             Just c -> Just (min c (T.minimum txt))
 {-# INLINABLE minimum #-}
 
-
 -- | Find the first element in the stream that matches the predicate
 find
     :: (Monad m)
@@ -518,12 +479,12 @@ count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
 {-# INLINABLE count #-}
 
 
-{-| Consume the first character from a stream of 'Text'
+-- | Consume the first character from a stream of 'Text'
+-- 
+-- 'next' either fails with a 'Left' if the 'Producer' has no more characters or
+-- succeeds with a 'Right' providing the next character and the remainder of the
+-- 'Producer'.
 
-    'next' either fails with a 'Left' if the 'Producer' has no more characters or
-    succeeds with a 'Right' providing the next character and the remainder of the
-    'Producer'.
--}
 nextChar
     :: (Monad m)
     => Producer Text m r
@@ -539,9 +500,8 @@ nextChar = go
                 Just (c, txt') -> return (Right (c, yield txt' >> p'))
 {-# INLINABLE nextChar #-}
 
-{-| Draw one 'Char' from a stream of 'Text', returning 'Left' if the
-    'Producer' is empty
--}
+-- | Draw one 'Char' from a stream of 'Text', returning 'Left' if the 'Producer' is empty
+
 drawChar :: (Monad m) => Parser Text m (Maybe Char)
 drawChar = do
     x <- PP.draw
@@ -568,7 +528,9 @@ unDrawChar c = modify (yield (T.singleton c) >>)
 >         Left  _  -> return ()
 >         Right c -> unDrawChar c
 >     return x
+
 -}
+
 peekChar :: (Monad m) => Parser Text m (Maybe Char)
 peekChar = do
     x <- drawChar
@@ -593,8 +555,6 @@ isEndOfChars = do
         Nothing -> True
         Just _-> False )
 {-# INLINABLE isEndOfChars #-}
-
-
 
 
 -- | Splits a 'Producer' after the given number of characters
@@ -623,9 +583,10 @@ splitAt n0 k p0 = fmap join (k (go n0 p0))
 {-# INLINABLE splitAt #-}
 
 
-{-| Split a text stream in two, where the first text stream is the longest
-    consecutive group of text that satisfy the predicate
--}
+-- | Split a text stream in two, producing the longest
+--   consecutive group of characters that satisfies the predicate
+--   and returning the rest
+
 span
     :: (Monad m)
     => (Char -> Bool)
@@ -648,7 +609,7 @@ span predicate k p0 = fmap join (k (go p0))
                         return (yield suffix >> p')
 {-# INLINABLE span #-}
 
-{-| Split a text stream in two, where the first text stream is the longest
+{-| Split a text stream in two, producing the longest
     consecutive group of characters that don't satisfy the predicate
 -}
 break
@@ -928,10 +889,6 @@ unwords
 unwords = intercalate (yield $ T.singleton ' ')
 {-# INLINABLE unwords #-}
 
-{- $parse
-    The following parsing utilities are single-character analogs of the ones found
-    @pipes-parse@.
--}
 
 {- $reexports
     

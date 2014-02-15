@@ -1,8 +1,8 @@
 name:                pipes-text
 version:             0.0.0.7
 synopsis:            Text pipes.
-description:         (This package will be in a draft, or testing, phase until version 0.0.1. Please report any api objections or installation difficulties on the github page!)
-
+description:         * This package will be in a draft, or testing, phase until version 0.0.1. Please report any installation difficulties, or any wisdom about the api, on the github page!
+                     .
                      This organization of the package follows the rule 
                      .
                      * @pipes-text : pipes-bytestring :: text : bytestring@ 
