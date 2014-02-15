@@ -1,26 +1,24 @@
 
 {-# LANGUAGE RankNTypes, BangPatterns #-}
 -- |
--- Copyright: 2014 Michael Thompson
---
+
 -- This module uses the stream decoding functions from the text-stream-decoding package
 -- to define pipes decoding functions and lenses.
 
 module Pipes.Text.Encoding
-    ( DecodeResult (..)
-    , Codec
-    , decodeUtf8
-    , decodeUtf8Pure
-    , decodeUtf16LE
-    , decodeUtf16BE
-    , decodeUtf32LE
-    , decodeUtf32BE
+    ( Codec
     , utf8
     , utf8Pure
     , utf16LE
     , utf16BE
     , utf32LE
     , utf32BE
+    , decodeUtf8
+    , decodeUtf8Pure
+    , decodeUtf16LE
+    , decodeUtf16BE
+    , decodeUtf32LE
+    , decodeUtf32BE
     , encodeAscii
     , decodeAscii
     , encodeIso8859_1
@@ -37,6 +35,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE 
 import Data.Text.StreamDecoding
 import Control.Monad (join)
+import Data.Word (Word8)
 import Pipes
 
 
