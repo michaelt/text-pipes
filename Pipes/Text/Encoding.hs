@@ -31,17 +31,13 @@ module Pipes.Text.Encoding
 import Data.Char (ord)
 import Data.ByteString as B 
 import Data.ByteString (ByteString)
-import Data.ByteString.Internal as B 
 import Data.ByteString.Char8 as B8
 import Data.Text (Text)
 import qualified Data.Text as T 
 import qualified Data.Text.Encoding as TE 
 import Data.Text.StreamDecoding
-import GHC.Word (Word8, Word32)
-import Data.Word (Word8, Word16)
-import Control.Monad
+import Control.Monad (join)
 import Pipes
-import Pipes.Core
 
 
 
