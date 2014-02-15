@@ -1,11 +1,41 @@
 {-#LANGUAGE RankNTypes#-}
+-- | The operations exported here are a convenience, like the similar operations in 
+--   @Data.Text.IO@ , or rather, @Data.Text.Lazy.IO@, since @Producer Text m r@ is
+--   'effectful text' and something like the pipes equivalent of lazy Text.
+--
+--   * Like the functions in @Data.Text.IO@, they attempt to work with the system encoding. 
+--   
+--   * Like the functions in @Data.Text.IO@, they are slower than ByteString operations. Where
+--      you know what encoding you are working with, use @Pipes.ByteString@ and @Pipes.Text.Encoding@ instead,
+--      e.g. @view utf8 Bytes.stdin@ instead of @Text.stdin@
+--   
+--   * Like the functions in  @Data.Text.IO@ , they use Text exceptions. 
+--
+--  Something like 
+--  
+--   >  view utf8 . Bytes.fromHandle :: Handle -> Producer Text IO (Producer ByteString m ()) 
+-- 
+--  yields a stream of Text, and follows
+--  standard pipes protocols by reverting to (i.e. returning) the underlying byte stream
+--  upon reaching any decoding error. (See especially the pipes-binary package.) 
+--
+-- By contrast, something like 
+-- 
+--  > Text.fromHandle :: Handle -> Producer Text IO () 
+-- 
+-- supplies a stream of text returning '()', which is convenient for many tasks, 
+-- but violates the pipes @pipes-binary@ approach to decoding errors and 
+-- throws an exception of the kind characteristic of the @text@ library instead.
 
 module Pipes.Text.IO 
-   ( stdin
-   , stdout
-   , fromHandle
-   , toHandle
+   ( 
+   -- * Producers
+   fromHandle
+   , stdin
    , readFile
+   -- * Consumers
+   , toHandle
+   , stdout
    , writeFile
    ) where
 
@@ -22,15 +52,12 @@ import qualified Pipes.Safe as Safe
 import Pipes.Safe (MonadSafe(..), Base(..))
 import Prelude hiding (readFile, writeFile)
 
--- | Stream text from 'stdin'
-stdin :: MonadIO m => Producer Text m ()
-stdin = fromHandle IO.stdin
-{-# INLINE stdin #-}
 
 {-| Convert a 'IO.Handle' into a text stream using a text size 
-    determined by the good sense of the text library; note that this
-    is distinctly slower than @decideUtf8 (Pipes.ByteString.fromHandle h)@
-    but uses the system encoding and has other `Data.Text.IO` features
+    determined by the good sense of the text library. Note with the remarks 
+    at the head of this module that this
+    is  slower than @view utf8 (Pipes.ByteString.fromHandle h)@
+    but uses the system encoding and has other nice @Data.Text.IO@ features
 -}
 
 fromHandle :: MonadIO m => IO.Handle -> Producer Text m ()
@@ -40,6 +67,11 @@ fromHandle h =  go where
                             else do yield txt
                                     go 
 {-# INLINABLE fromHandle#-}
+
+-- | Stream text from 'stdin'
+stdin :: MonadIO m => Producer Text m ()
+stdin = fromHandle IO.stdin
+{-# INLINE stdin #-}
 
 
 {-| Stream text from a file in the simple fashion of @Data.Text.IO@ 
