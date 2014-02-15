@@ -23,7 +23,7 @@ category:            Text, Pipes
 build-type:          Simple
 cabal-version:       >=1.10
 
-extra-source-files: README.md include/*.h changelog
+extra-source-files: README.md changelog
 source-repository head
     type: git
     location: https://github.com/michaelt/text-pipes
