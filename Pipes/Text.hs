@@ -165,47 +165,29 @@ module Pipes.Text  (
     , module Data.ByteString
     , module Data.Text
     , module Data.Profunctor
-    , module Data.Word
     , module Pipes.Parse
     , module Pipes.Group
     ) where
 
 import Control.Applicative ((<*)) 
-import Control.Monad (liftM, unless, join)
+import Control.Monad (liftM, join)
 import Control.Monad.Trans.State.Strict (StateT(..), modify)
-import Data.Monoid ((<>))
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import qualified Data.Text.Encoding as TE
-import qualified Data.Text.Encoding.Error as TE
 import Data.Text (Text)
 import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.IO as TL
 import Data.Text.Lazy.Internal (foldrChunks, defaultChunkSize)
-import Data.ByteString.Unsafe (unsafeTake, unsafeDrop)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as B8
-import Data.Char (ord, isSpace)
 import Data.Functor.Constant (Constant(Constant, getConstant))
 import Data.Functor.Identity (Identity)
 import Data.Profunctor (Profunctor)
 import qualified Data.Profunctor
-import qualified Data.List as List
 import Pipes
-import qualified Pipes.ByteString as PB
--- import Pipes.Text.Decoding
-import Pipes.Core (respond, Server')
 import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
-
 import qualified Pipes.Prelude as P
-import qualified System.IO as IO
 import Data.Char (isSpace)
-import Data.Word (Word8)
-import Data.Text.StreamDecoding
 
 import Prelude hiding (
     all,
@@ -272,13 +254,13 @@ concatMap f = P.map (T.concatMap f)
 -- | Transform a Pipe of 'Text' into a Pipe of 'ByteString's using UTF-8
 -- encoding; @encodeUtf8 = Pipes.Prelude.map TE.encodeUtf8@ so more complex
 -- encoding pipes can easily be constructed with the functions in @Data.Text.Encoding@
-encodeUtf8 :: Monad m => Pipe Text ByteString m r
-encodeUtf8 = P.map TE.encodeUtf8
-{-# INLINEABLE encodeUtf8 #-}
-
-{-# RULES "p >-> encodeUtf8" forall p .
-        p >-> encodeUtf8 = for p (\txt -> yield (TE.encodeUtf8 txt))
-  #-}
+-- encodeUtf8 :: Monad m => Pipe Text ByteString m r
+-- encodeUtf8 = P.map TE.encodeUtf8
+-- {-# INLINEABLE encodeUtf8 #-}
+-- 
+-- {-# RULES "p >-> encodeUtf8" forall p .
+--         p >-> encodeUtf8 = for p (\txt -> yield (TE.encodeUtf8 txt))
+--   #-}
 
 -- | Transform a Pipe of 'String's into one of 'Text' chunks
 pack :: Monad m => Pipe String Text m r
