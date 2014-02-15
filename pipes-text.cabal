@@ -1,25 +1,17 @@
 name:                pipes-text
 version:             0.0.0.7
 synopsis:            Text pipes.
-description:         Many of the pipes and other operations defined here mirror those in
-                     the `pipes-bytestring` library. Folds like `length` and grouping 
-                     operations like `lines` simply  adjust for the differences between 
-                     `ByteString` and `Text` and `Word8` and `Char`. It is hoped that this
-                     homogeneity will aid in learning the terms and programming style associated
-                     with both of them.  
+description:         (This package will be in a draft, or testing, phase until version 0.0.1. Please report any api objections or installation difficulties on the github page!)
+
+                     This organization of the package follows the rule 
                      .
-                     The most distinctive addition of the library to that core is the 
-                     apparatus for encoding and decoding `Text` and `ByteString`.
+                     * @pipes-text : pipes-bytestring :: text : bytestring@ 
                      .
-                     Also defined are some simple functions akin to the `String` 
-                     operations in `Pipes.Prelude`, and others like the utilities in `Data.Text`.  
+                     Familiarity with the other three packages should give one an idea what to expect where. The package has three modules, @Pipes.Text@ , @Pipes.Text.Encoding@ and @Pipes.Text.IO@; the division has more or less the significance it has in the @text@ library. 
                      .
-                     All of the `IO` operations defined here - e.g `readFile`, `stdout` etc. 
-                     - are conveniences akin to those in `Data.Text.IO` which e.g. try to 
-                     find the system encoding and use the exceptions defined in the `text`
-                     library. Proper `IO` in the sense of this library will employ 
-                     `pipes-bytestring` in conjuntion with 'pure' operations like 
-                     `decodeUtf8` and `encodeUtf8` that are defined here. 
+                     Note that the module @Pipes.Text.IO@ is present as a convenience (as is @Data.Text.IO@).  Official pipes IO would use @Pipes.ByteString@ and the decoding functions present here, based on the new Michael Snoyman's new @text-stream-decoding@ package.  In particular, the @Pipes.Text.IO@ functions use Text exceptions. 
+                     .
+                     @Pipes.Text.IO@ uses version 0.11.3 or later of the @text@ library. It thus works with the version of @text@ that came with the 2013 Haskell Platform. To use an older @text@, install with the flag @-fnoio@
 
 homepage:            https://github.com/michaelt/text-pipes
 bug-reports:         https://github.com/michaelt/text-pipes/issues

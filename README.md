@@ -1,17 +1,6 @@
-text-pipes
+pipes-text
 ==========
 
-This repo is called `text-pipes`, but the package is named `pipes-text` as one might expect.  
-The two modules it contatins, `Pipes.Text` and `Pipes.Text.Parse`, use materials from [`pipes-text`](https://github.com/ibotty/pipes-text); 
-otherwise they follow the pattern of [`pipes-bytestring`](https://github.com/Gabriel439/Haskell-Pipes-ByteString-Library), adding a few `pipes-prelude`-like operations.
-The most important function, `decodeUtf8`, written by ibotty, uses the development version of the text package; this package can however be built with the hackage `text` 
-though `decodeUtf8` will then not exist.
+This package follows the rule `pipes-text : pipes-bytestring :: text : bytestring` It has three modules, `Pipes.Text` , `Pipes.Text.Encoding` and `Pipes.Text.IO`; the division has more or less the significance it has in the `text` library. 
 
-     >>> runEffect $ stdinLn >-> P.takeWhile (/= "quit") >-> stdoutLn
-     hi<Return>
-     hi
-     quit<Return>
-     >>> runSafeT $ runEffect $ readFile "README.md" >-> toUpper >-> hoist lift stdout
-     TEXT-PIPES
-     ==========
-     ...
+Note that the module `Pipes.Text.IO` uses version 0.11.3 or later of the `text` library. (It thus works with the version of `text` that came with the 2013 Haskell Platform. To use an older `text`, install with the flag `-fnoio` 

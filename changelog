@@ -1,3 +1,8 @@
+# Version 0.0.0.7
+
+ * Used the new text-stream-decoding package
+ * Separated IO and Encoding modules adding flag -fnoio
+
  # Version 0.0.0.5
  
  * Rearranged internal modules
