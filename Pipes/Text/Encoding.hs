@@ -38,16 +38,18 @@ import Control.Monad (join)
 import Data.Word (Word8)
 import Pipes
 
-
+type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 
 {- | A 'Codec' is just an improper lens into a byte stream that is expected to contain text.
     They are named in accordance with the expected encoding, 'utf8', 'utf16LE' etc.
     The stream of text they 'see' in a bytestream ends by returning the original byte stream 
     beginning at the point of failure, or the empty bytestream with its return value.
    -}
-type Codec  = forall f m r . (Functor f , Monad m ) => 
-     (Producer Text m (Producer ByteString m r) -> f (Producer Text m (Producer ByteString m r)))
-     -> Producer ByteString m r -> f (Producer ByteString m r )
+type Codec
+    =  forall m r
+    .  Monad m
+    => Lens' (Producer ByteString m r)
+             (Producer Text m (Producer ByteString m r))
 
 decodeStream :: Monad m 
        => (B.ByteString -> DecodeResult) 
