@@ -1,24 +1,31 @@
-
 {-# LANGUAGE RankNTypes, BangPatterns #-}
 -- |
 
 -- This module uses the stream decoding functions from the text-stream-decoding package
--- to define pipes decoding functions and lenses.
+-- to define decoding functions and lenses.
 
 module Pipes.Text.Encoding
-    ( Codec
+    ( 
+    -- * Lens type
+    -- $lenses
+    Codec
+    -- * Standard lenses for viewing Text in ByteString
+    -- $codecs
     , utf8
     , utf8Pure
     , utf16LE
     , utf16BE
     , utf32LE
     , utf32BE
+    -- * Non-lens decoding functions 
     , decodeUtf8
     , decodeUtf8Pure
     , decodeUtf16LE
     , decodeUtf16BE
     , decodeUtf32LE
     , decodeUtf32BE
+    -- * Functions for latin and ascii text
+    -- $ascii
     , encodeAscii
     , decodeAscii
     , encodeIso8859_1
@@ -38,13 +45,22 @@ import Control.Monad (join)
 import Data.Word (Word8)
 import Pipes
 
+
 type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 
-{- | A 'Codec' is just an improper lens into a byte stream that is expected to contain text.
-    They are named in accordance with the expected encoding, 'utf8', 'utf16LE' etc.
-    The stream of text they 'see' in a bytestream ends by returning the original byte stream 
-    beginning at the point of failure, or the empty bytestream with its return value.
-   -}
+{- $lenses
+    The 'Codec' type is just an aliased standard Prelude type. It just specializes 
+    the @Lens'@ type synonymn used by the standard lens libraries, @lens@ and 
+    @lens-families@ . You use them with
+    the @view@ or @(^.)@ and @zoom@ functions from those libraries.
+    
+    Each codec lens looks into a byte stream that is understood to contain text.
+    The stream of text it 'sees' in the stream of bytes begins at its head; it ends 
+    by reverting to (returning) the original byte stream 
+    beginning at the point of decoding failure. Where there is no decoding failure, 
+    it returns an empty byte stream with its return value. 
+    -}
+
 type Codec
     =  forall m r
     .  Monad m
@@ -65,6 +81,9 @@ decodeStream = loop where
                                                       return (do yield bs 
                                                                  p')
 {-# INLINABLE decodeStream#-}
+
+
+
 
 decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
 decodeUtf8 = decodeStream streamUtf8
@@ -97,10 +116,28 @@ mkCodec :: (forall r m . Monad m =>
 mkCodec dec enc = \k p0 -> fmap (\p -> join (for p (yield . enc)))  (k (dec p0))
 
 
-{- | An improper lens into a byte stream expected to be UTF-8 encoded; the associated
-   text stream ends by returning the original bytestream beginning at the point of failure,
-   or the empty bytestring for a well-encoded text. 
-   -}
+{- $codecs
+    
+    The particular \'Codec\' lenses are named in accordance with the expected encoding, 'utf8', 'utf16LE' etc.
+
+>   view utf8 :: Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+>   Bytes.stdin ^. utf8 ::  Producer Text IO (Producer ByteString IO r)
+
+    @zoom@ converts a Text parser into a ByteString parser:
+
+>   zoom utf8 drawChar :: Monad m => StateT (Producer ByteString m r) m (Maybe Char)
+> 
+>   withNextByte :: Parser ByteString m (Maybe Char, Maybe Word8))) 
+>   withNextByte = do char_ <- zoom utf8 Text.drawChar
+>                     byte_ <- Bytes.peekByte
+>                     return (char_, byte_)
+
+     @withNextByte@ will return the first valid Char in a ByteString, 
+     and the first byte of the next character, if they exists. Because 
+     we \'draw\' one and \'peek\' at the other, the parser as a whole only 
+     advances one Char's length along the bytestring.
+
+    -}
 
 utf8 :: Codec
 utf8 = mkCodec decodeUtf8 TE.encodeUtf8
@@ -121,13 +158,15 @@ utf32BE :: Codec
 utf32BE = mkCodec decodeUtf32BE TE.encodeUtf32BE
 
 
-{- | ascii and latin encodings only use a small number of the characters 'Text'
-     recognizes; thus we cannot use the pipes 'Lens' style to work with them. 
+{- $ascii
+   ascii and latin encodings only use a small number of the characters 'Text'
+     recognizes; thus we cannot use the pipes @Lens@ style to work with them. 
      Rather we simply define functions each way. 
-
-     'encodeAscii' : Reduce as much of your stream of 'Text' actually is ascii to a byte stream,
-     returning the rest of the 'Text' at the first non-ascii 'Char'
 -}
+
+
+--  'encodeAscii' reduces as much of your stream of 'Text' actually is ascii to a byte stream,
+--   returning the rest of the 'Text' at the first non-ascii 'Char'
 
 encodeAscii :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)
 encodeAscii = go where
