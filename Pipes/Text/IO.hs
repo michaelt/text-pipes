@@ -60,7 +60,7 @@ import Prelude hiding (readFile, writeFile)
     but uses the system encoding and has other nice @Data.Text.IO@ features
 -}
 
-fromHandle :: MonadIO m => IO.Handle -> Producer Text m ()
+fromHandle :: MonadIO m => IO.Handle -> Producer' Text m ()
 fromHandle h =  go where
       go = do txt <- liftIO (T.hGetChunk h)
               if T.null txt then return ()
@@ -69,7 +69,7 @@ fromHandle h =  go where
 {-# INLINABLE fromHandle#-}
 
 -- | Stream text from 'stdin'
-stdin :: MonadIO m => Producer Text m ()
+stdin :: MonadIO m => Producer' Text m ()
 stdin = fromHandle IO.stdin
 {-# INLINE stdin #-}
 
@@ -80,7 +80,7 @@ stdin = fromHandle IO.stdin
 MAIN = PUTSTRLN "HELLO WORLD"
 -}
 
-readFile :: MonadSafe m => FilePath -> Producer Text m ()
+readFile :: MonadSafe m => FilePath -> Producer' Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
 {-# INLINE readFile #-}
 
