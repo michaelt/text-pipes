@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Trustworthy #-}
 
 {-| This package provides @pipes@ utilities for \'text streams\', which are
-    streams of 'Text' chunks. The individual chunks are uniformly @strict@, and you 
+    streams of 'Text' chunks. The individual chunks are uniformly @strict@, and thus you 
     will generally want @Data.Text@ in scope.  But the type @Producer Text m r@ is
     in some ways the pipes equivalent of the lazy @Text@ type.
 
@@ -9,8 +9,8 @@
     the 'pure' functions in 
     <https://hackage.haskell.org/package/text-1.1.0.0/docs/Data-Text-Lazy.html Data.Text.Lazy>. 
     They transform, divide, group and fold text streams. Though @Producer Text m r@ 
-    is \'effectful\' Text, functions
-    in this module are \'pure\' in the sense that they are uniformly monad-independent.
+    is the type of \'effectful Text\', the functions in this module are \'pure\' 
+    in the sense that they are uniformly monad-independent.
     Simple IO operations are defined in @Pipes.Text.IO@ -- as lazy IO @Text@ 
     operations are in @Data.Text.Lazy.IO@. Interoperation with @ByteString@ 
     is provided in @Pipes.Text.Encoding@, which parallels @Data.Text.Lazy.Encoding@. 
@@ -49,7 +49,10 @@
     <http://hackage.haskell.org/package/pipes-parse-3.0.1/docs/Pipes-Parse-Tutorial.html pipes-parse> 
     sense.) 
     Each such expression, e.g. 'lines', 'chunksOf' or 'splitAt', reduces to the 
-    intuitively corresponding function when used with @view@ or @(^.)@.
+    intuitively corresponding function when used with @view@ or @(^.)@.  The lens combinators
+    you will find indispensible are \'view\'/ '(^.)', 'zoom' and probably 'over', which
+    are supplied by both <http://hackage.haskell.org/package/lens lens> and 
+    <http://hackage.haskell.org/package/lens-family lens-family>
     
     A more important difference the example reveals is in the types closely associated with
     the central type, @Producer Text m r@.  In @Data.Text@ and @Data.Text.Lazy@
@@ -62,15 +65,14 @@
     which relate a Text with a pair or list of Texts. The corresponding functions here (taking
     account of \'lensification\') are 
     
->   view . splitAt :: (Monad m, Integral n) 
->                  => n -> Producer Text m r -> Producer Text.Text m (Producer Text.Text m r)
+>   view . splitAt :: (Monad m, Integral n) => n -> Producer Text m r -> Producer Text.Text m (Producer Text.Text m r)
 >   view lines :: Monad m => Producer Text m r -> FreeT (Producer Text m) m r
 >   view . chunksOf ::  (Monad m, Integral n) => n -> Producer Text m r -> FreeT (Producer Text m) m r
 
     In the type @Producer Text m (Producer Text m r)@ the second 
     element of the \'pair\' of of \'effectful Texts\' cannot simply be retrieved 
     with 'snd'. This is an \'effectful\' pair, and one must work through the effects
-    of the first element to arrive at the second. Similarly in @FreeT (Producer Text m) m r@,
+    of the first element to arrive at the second Text stream. Similarly in @FreeT (Producer Text m) m r@,
     which corresponds with @[Text]@, on cannot simply drop 10 Producers and take the others;
     we can only get to the ones we want to take by working through their predecessors.
     

@@ -189,7 +189,7 @@ mkCodec dec enc = \k p0 -> fmap (\p -> join (for p (yield . enc)))  (k (dec p0))
 >   decode utf8 Byte.stdin :: Producer Text IO (Producer ByteString IO r)
 >   Bytes.stdin ^. utf8 ::  Producer Text IO (Producer ByteString IO r)
 
-    Uses of a codec with @view@ / @(^.)@ / 'decode' can always be replaced by the specialized 
+    Uses of a codec with @view@ or @(^.)@ or 'decode' can always be replaced by the specialized 
     decoding functions exported here, e.g. 
 
 >   decodeUtf8 ::  Producer ByteString m r -> Producer Text m (Producer ByteString m r)
