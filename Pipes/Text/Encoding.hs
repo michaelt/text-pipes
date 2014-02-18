@@ -1,16 +1,17 @@
 {-# LANGUAGE RankNTypes, BangPatterns #-}
--- |
 
--- This module uses the stream decoding functions from the text-stream-decoding package
--- to define decoding functions and lenses.
+-- | This module uses the stream decoding functions from Michael Snoyman's new
+--  <http://hackage.haskell.org/package/text-stream-decode text-stream-decode> 
+--  package to define decoding functions and lenses.  
 
 module Pipes.Text.Encoding
     ( 
-    -- * Lens type
+    -- * The Lens or Codec type
     -- $lenses
     Codec
-    -- * Standard lenses for viewing Text in ByteString
+    -- * Viewing the Text in a ByteString
     -- $codecs
+    , decode
     , utf8
     , utf8Pure
     , utf16LE
@@ -18,12 +19,20 @@ module Pipes.Text.Encoding
     , utf32LE
     , utf32BE
     -- * Non-lens decoding functions 
+    -- $decoders
     , decodeUtf8
     , decodeUtf8Pure
     , decodeUtf16LE
     , decodeUtf16BE
     , decodeUtf32LE
     , decodeUtf32BE
+    -- * Re-encoding functions
+    -- $encoders
+    , encodeUtf8
+    , encodeUtf16LE
+    , encodeUtf16BE
+    , encodeUtf32LE
+    , encodeUtf32BE
     -- * Functions for latin and ascii text
     -- $ascii
     , encodeAscii
@@ -33,6 +42,7 @@ module Pipes.Text.Encoding
     ) 
     where
 
+import Data.Functor.Constant (Constant(..))
 import Data.Char (ord)
 import Data.ByteString as B 
 import Data.ByteString (ByteString)
@@ -49,16 +59,16 @@ import Pipes
 type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 
 {- $lenses
-    The 'Codec' type is just an aliased standard Prelude type. It just specializes 
-    the @Lens'@ type synonymn used by the standard lens libraries, @lens@ and 
-    @lens-families@ . You use them with
-    the @view@ or @(^.)@ and @zoom@ functions from those libraries.
+    The 'Codec' type is a simple specializion of 
+    the @Lens'@ type synonymn used by the standard lens libraries, 
+    <http://hackage.haskell.org/package/lens lens> and 
+    <http://hackage.haskell.org/package/lens-family lens-family>. That type, 
     
-    Each codec lens looks into a byte stream that is understood to contain text.
-    The stream of text it 'sees' in the stream of bytes begins at its head; it ends 
-    by reverting to (returning) the original byte stream 
-    beginning at the point of decoding failure. Where there is no decoding failure, 
-    it returns an empty byte stream with its return value. 
+>   type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
+
+    is just an alias for an ordinary Prelude type.  Thus you use any codec with
+    the @view@ / @(^.)@ and @zoom@ functions from those libraries.
+
     -}
 
 type Codec
@@ -66,6 +76,17 @@ type Codec
     .  Monad m
     => Lens' (Producer ByteString m r)
              (Producer Text m (Producer ByteString m r))
+             
+{- | 'decode' is just the ordinary @view@ or @(^.)@ of the lens libraries;
+      exported here for convience
+
+>    decode utf8 p = decodeUtf8 p = view utf8 p = p ^. utf
+
+-}
+
+decode :: ((b -> Constant b b) -> (a -> Constant b a)) -> a -> b
+decode codec a = getConstant (codec Constant a)
+
 
 decodeStream :: Monad m 
        => (B.ByteString -> DecodeResult) 
@@ -82,7 +103,20 @@ decodeStream = loop where
                                                                  p')
 {-# INLINABLE decodeStream#-}
 
+{- $decoders
+   These are functions with the simple type:
+   
+>   decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
 
+   Thus in general 
+
+>     decodeUtf8 = view utf8
+>     decodeUtf16LE = view utf16LE
+
+   and so forth, but these forms
+   may be more convenient (and give better type errors!) where lenses are
+   not desired.
+-}
 
 
 decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
@@ -109,6 +143,34 @@ decodeUtf32BE :: Monad m => Producer ByteString m r -> Producer Text m (Producer
 decodeUtf32BE = decodeStream streamUtf32BE
 {-# INLINE decodeUtf32BE #-}
 
+
+{- $encoders
+   These are simply defined 
+   
+>      encodeUtf8 = yield . TE.encodeUtf8
+   
+   They are intended for use with 'for'
+   
+>      for Text.stdin encodeUtf8 :: Producer ByteString IO ()
+
+   which would have the effect of 
+   
+>      Text.stdin >-> Pipes.Prelude.map (TE.encodeUtf8)
+
+   using the encoding functions from Data.Text.Encoding 
+-}
+
+encodeUtf8 :: Monad m => Text -> Producer ByteString m ()
+encodeUtf8 = yield . TE.encodeUtf8
+encodeUtf16LE :: Monad m => Text -> Producer ByteString m ()
+encodeUtf16LE = yield . TE.encodeUtf16LE
+encodeUtf16BE :: Monad m => Text -> Producer ByteString m ()
+encodeUtf16BE = yield . TE.encodeUtf16BE
+encodeUtf32LE :: Monad m => Text -> Producer ByteString m ()
+encodeUtf32LE = yield . TE.encodeUtf32LE
+encodeUtf32BE :: Monad m => Text -> Producer ByteString m ()
+encodeUtf32BE = yield . TE.encodeUtf32BE
+
 mkCodec :: (forall r m . Monad m => 
            Producer ByteString m r -> Producer Text m (Producer ByteString m r ))
         -> (Text -> ByteString)
@@ -118,11 +180,39 @@ mkCodec dec enc = \k p0 -> fmap (\p -> join (for p (yield . enc)))  (k (dec p0))
 
 {- $codecs
     
-    The particular \'Codec\' lenses are named in accordance with the expected encoding, 'utf8', 'utf16LE' etc.
+    Each codec/lens looks into a byte stream that is supposed to contain text.
+    The particular \'Codec\' lenses are named in accordance with the expected 
+    encoding, 'utf8', 'utf16LE' etc. @view@ / @(^.)@ -- here also called 'decode' -- 
+    turns a Codec into a function:
 
 >   view utf8 :: Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+>   decode utf8 Byte.stdin :: Producer Text IO (Producer ByteString IO r)
 >   Bytes.stdin ^. utf8 ::  Producer Text IO (Producer ByteString IO r)
 
+    Uses of a codec with @view@ / @(^.)@ / 'decode' can always be replaced by the specialized 
+    decoding functions exported here, e.g. 
+
+>   decodeUtf8 ::  Producer ByteString m r -> Producer Text m (Producer ByteString m r)
+>   decodeUtf8 Byte.stdin :: Producer Text IO (Producer ByteString IO r)
+
+    The stream of text a @Codec@ \'sees\' in the stream of bytes begins at its head. 
+    At any point of decoding failure, the stream of text ends and reverts to (returns) 
+    the original byte stream. Thus if the first bytes are already
+    un-decodable, the whole ByteString producer will be returned, i.e.
+
+>   view utf8 bytestream 
+
+    will just come to the same as 
+
+>   return bytestream
+
+    Where there is no decoding failure, the return value of the text stream will be
+    an empty byte stream followed by its own return value.  In all cases you must
+    deal with the fact that it is a ByteString producer that is returned, even if
+    it can be thrown away with @Control.Monad.void@
+
+>   void (Bytes.stdin ^. utf8) :: Producer Text IO ()
+    
     @zoom@ converts a Text parser into a ByteString parser:
 
 >   zoom utf8 drawChar :: Monad m => StateT (Producer ByteString m r) m (Maybe Char)
@@ -165,7 +255,7 @@ utf32BE = mkCodec decodeUtf32BE TE.encodeUtf32BE
 -}
 
 
---  'encodeAscii' reduces as much of your stream of 'Text' actually is ascii to a byte stream,
+-- | 'encodeAscii' reduces as much of your stream of 'Text' actually is ascii to a byte stream,
 --   returning the rest of the 'Text' at the first non-ascii 'Char'
 
 encodeAscii :: Monad m => Producer Text m r -> Producer ByteString m (Producer Text m r)

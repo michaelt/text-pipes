@@ -1,45 +1,31 @@
 {-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Trustworthy #-}
 
-{-| This module provides @pipes@ utilities for \"text streams\", which are
-    streams of 'Text' chunks. The individual chunks are uniformly @strict@, but 
-    a 'Producer' can be converted to and from lazy 'Text's, though this is generally 
-    unwise.  Where pipes IO replaces lazy IO, 'Producer Text m r' replaces lazy 'Text'.
-    An 'IO.Handle' can be associated with a 'Producer' or 'Consumer' according as it is read or written to.
+{-| This package provides @pipes@ utilities for \"text streams\", which are
+    streams of 'Text' chunks. The individual chunks are uniformly @strict@, and you 
+    will generally want @Data.Text@ in scope.  But the type @Producer Text m r@ is
+    in many ways the pipes equivalent of lazy @Text@ .
 
-    To stream to or from 'IO.Handle's, one can use 'fromHandle' or 'toHandle'.  For
-    example, the following program copies a document from one file to another:
+    This module provides many functions equivalent in one way or another to 
+    the 'pure' functions in 
+    <https://hackage.haskell.org/package/text-1.1.0.0/docs/Data-Text-Lazy.html Data.Text.Lazy>. 
+    They transform, divide, group and fold text streams. The functions
+    in this module are \'pure\' in the sense that they are uniformly monad-independent.
+    Simple IO operations are defined in 
+    @Pipes.Text.IO@ -- as lazy IO @Text@ operations are in @Data.Text.Lazy.IO@ Interoperation
+    with @ByteString@ is provided in @Pipes.Text.Encoding@, which parallels @Data.Text.Lazy.Encoding@. 
 
-> import Pipes
-> import qualified Pipes.Text as Text
-> import qualified Pipes.Text.IO as Text
-> import System.IO
->
-> main =
->     withFile "inFile.txt"  ReadMode  $ \hIn  ->
->     withFile "outFile.txt" WriteMode $ \hOut ->
->     runEffect $ Text.fromHandle hIn >-> Text.toHandle hOut
-
-To stream from files, the following is perhaps more Prelude-like (note that it uses Pipes.Safe):
-
-> import Pipes
-> import qualified Pipes.Text as Text
-> import qualified Pipes.Text.IO as Text
-> import Pipes.Safe
->
-> main = runSafeT $ runEffect $ Text.readFile "inFile.txt" >-> Text.writeFile "outFile.txt"
-
-    You can stream to and from 'stdin' and 'stdout' using the predefined 'stdin'
-    and 'stdout' pipes, as with the following \"echo\" program:
-
-> main = runEffect $ Text.stdin >-> Text.stdout
-
-    You can also translate pure lazy 'TL.Text's to and from pipes:
-
-> main = runEffect $ Text.fromLazy (TL.pack "Hello, world!\n") >-> Text.stdout
-
-    In addition, this module provides many functions equivalent to lazy
-    'Text' functions so that you can transform or fold text streams.  For
-    example, to stream only the first three lines of 'stdin' to 'stdout' you
+    The Text type exported by @Data.Text.Lazy@ is similar to '[Text]' 
+    where the individual chunks are kept to a reasonable size; the user is not 
+    aware of the divisions between the connected (strict) 'Text' chunks. 
+    Similarly, functions in this module are designed to operate on streams that
+    are insensitive to text boundaries.  This means that they may freely split
+    text into smaller texts, /discard empty texts/.  However, the objective is that they should
+    /never concatenate texts/ in order to provide strict upper bounds on memory usage. 
+    
+    One difference from @Data.Text.Lazy@ is that many of the operations are 'lensified';
+    this has a number of advantages where it is possible, in particular it facilitate 
+    their use with pipes-style 'Parser's of Text. 
+    For example, to stream only the first three lines of 'stdin' to 'stdout' you
     might write:
 
 > import Pipes
@@ -51,13 +37,7 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 >     takeLines n = Text.unlines . Parse.takeFree n . Text.lines
 
     The above program will never bring more than one chunk of text (~ 32 KB) into
-    memory, no matter how long the lines are.
-
-    Note that functions in this library are designed to operate on streams that
-    are insensitive to text boundaries.  This means that they may freely split
-    text into smaller texts, /discard empty texts/.  However, apart from the 
-    special case of 'concatMap', they will /never concatenate texts/ in order 
-    to provide strict upper bounds on memory usage -- with the single exception of 'concatMap'.  
+    memory, no matter how long the lines are. 
 -}
 
 module Pipes.Text  (
@@ -97,7 +77,6 @@ module Pipes.Text  (
     , count
 
     -- * Primitive Character Parsers
-    -- $parse
     , nextChar
     , drawChar
     , unDrawChar
