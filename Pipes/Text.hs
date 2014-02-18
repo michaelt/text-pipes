@@ -1,43 +1,88 @@
 {-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Trustworthy #-}
 
-{-| This package provides @pipes@ utilities for \"text streams\", which are
+{-| This package provides @pipes@ utilities for \'text streams\', which are
     streams of 'Text' chunks. The individual chunks are uniformly @strict@, and you 
     will generally want @Data.Text@ in scope.  But the type @Producer Text m r@ is
-    in many ways the pipes equivalent of lazy @Text@ .
+    in some ways the pipes equivalent of the lazy @Text@ type.
 
     This module provides many functions equivalent in one way or another to 
     the 'pure' functions in 
     <https://hackage.haskell.org/package/text-1.1.0.0/docs/Data-Text-Lazy.html Data.Text.Lazy>. 
-    They transform, divide, group and fold text streams. The functions
+    They transform, divide, group and fold text streams. Though @Producer Text m r@ 
+    is \'effectful\' Text, functions
     in this module are \'pure\' in the sense that they are uniformly monad-independent.
-    Simple IO operations are defined in 
-    @Pipes.Text.IO@ -- as lazy IO @Text@ operations are in @Data.Text.Lazy.IO@ Interoperation
-    with @ByteString@ is provided in @Pipes.Text.Encoding@, which parallels @Data.Text.Lazy.Encoding@. 
+    Simple IO operations are defined in @Pipes.Text.IO@ -- as lazy IO @Text@ 
+    operations are in @Data.Text.Lazy.IO@. Interoperation with @ByteString@ 
+    is provided in @Pipes.Text.Encoding@, which parallels @Data.Text.Lazy.Encoding@. 
 
-    The Text type exported by @Data.Text.Lazy@ is similar to '[Text]' 
-    where the individual chunks are kept to a reasonable size; the user is not 
-    aware of the divisions between the connected (strict) 'Text' chunks. 
-    Similarly, functions in this module are designed to operate on streams that
+    The Text type exported by @Data.Text.Lazy@ is basically '[Text]'. The implementation
+    is arranged so that the individual strict 'Text' chunks are kept to a reasonable size; 
+    the user is not aware of the divisions between the connected 'Text' chunks. 
+    So also here: the functions in this module are designed to operate on streams that
     are insensitive to text boundaries.  This means that they may freely split
-    text into smaller texts, /discard empty texts/.  However, the objective is that they should
-    /never concatenate texts/ in order to provide strict upper bounds on memory usage. 
-    
-    One difference from @Data.Text.Lazy@ is that many of the operations are 'lensified';
-    this has a number of advantages where it is possible, in particular it facilitate 
-    their use with pipes-style 'Parser's of Text. 
+    text into smaller texts and /discard empty texts/.  However, the objective is 
+    that they should /never concatenate texts/ in order to provide strict upper 
+    bounds on memory usage. 
+
     For example, to stream only the first three lines of 'stdin' to 'stdout' you
     might write:
 
 > import Pipes
 > import qualified Pipes.Text as Text
-> import qualified Pipes.Parse as Parse
->
+> import qualified Pipes.Text.IO as Text
+> import Pipes.Group
+> import Lens.Family 
+> 
 > main = runEffect $ takeLines 3 Text.stdin >-> Text.stdout
->   where
->     takeLines n = Text.unlines . Parse.takeFree n . Text.lines
+>   where 
+>     takeLines n = Text.unlines . takes' n . view Text.lines
+>  -- or equivalently: 
+>  -- takeLines n = over Text.lines (takes' n)
 
     The above program will never bring more than one chunk of text (~ 32 KB) into
-    memory, no matter how long the lines are. 
+    memory, no matter how long the lines are.
+    
+    As this example shows, one superficial difference from @Data.Text.Lazy@ 
+    is that many of the operations, like 'lines',
+    are \'lensified\'; this has a number of advantages where it is possible, in particular 
+    it facilitates their use with 'Parser's of Text in the general pipes sense. 
+    Each such expression reduces to the naturally corresponding function when 
+    used with @view@ or @(^.)@.
+    
+    A more important difference the example reveals is in the types closely associated with
+    the central type, @Producer Text m r@.  In @Data.Text@ and @Data.Text.Lazy@
+    we find functions like
+    
+>   splitAt :: Int -> Text -> (Text, Text)
+>   lines :: Int -> Text -> [Text]
+
+    which relate a Text with a pair or list of Texts. The corresponding functions here (taking
+    account of \'lensification\') are 
+    
+>   view . splitAt :: (Monad m, Integral n) 
+>                  => n -> Producer Text m r -> Producer Text.Text m (Producer Text.Text m r)
+>   view lines :: Monad m => Producer Text m r -> FreeT (Producer Text m) m r
+
+    In the type @Producer Text.Text m (Producer Text.Text m r)@ the second 
+    element of the \'pair\' of of \'effectful Texts\' cannot simply be retrieved 
+    with 'snd'. This is an \'effectful\' pair, and one must work through the effects
+    of the first element to arrive at the second. Similarly in @FreeT (Producer Text m) m r@,
+    which corresponds with @[Text]@, on cannot simply drop 10 Producers and take the others;
+    we can only get to the ones we want to take by working through their predecessors.
+    
+    Some of the types may be more readable if you imagine that we have introduced
+    our own type synonyms
+    
+>   type Text m r = Producer T.Text m r
+>   type Texts m r = FreeT (Producer T.Text m) m r
+
+    Then we would think of the types above as
+    
+>   view . splitAt :: (Monad m, Integral n) => n -> Text m r -> Text m (Text m r)
+>   view lines :: (Monad m) => Text m r -> Texts m r
+
+    which brings one closer to the types of the similar functions in @Data.Text.Lazy@
+
 -}
 
 module Pipes.Text  (

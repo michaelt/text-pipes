@@ -1,5 +1,5 @@
 name:                pipes-text
-version:             0.0.0.7
+version:             0.0.0.8
 synopsis:            Text pipes.
 description:         * This package will be in a draft, or testing, phase until version 0.0.1. Please report any installation difficulties, or any wisdom about the api, on the github page!
                      .
