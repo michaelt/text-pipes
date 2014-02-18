@@ -45,9 +45,11 @@
     As this example shows, one superficial difference from @Data.Text.Lazy@ 
     is that many of the operations, like 'lines',
     are \'lensified\'; this has a number of advantages where it is possible, in particular 
-    it facilitates their use with 'Parser's of Text in the general pipes sense. 
-    Each such expression reduces to the naturally corresponding function when 
-    used with @view@ or @(^.)@.
+    it facilitates their use with 'Parser's of Text (in the general 
+    <http://hackage.haskell.org/package/pipes-parse-3.0.1/docs/Pipes-Parse-Tutorial.html pipes-parse> 
+    sense.) 
+    Each such expression, e.g. 'lines', 'chunksOf' or 'splitAt', reduces to the 
+    intuitively corresponding function when used with @view@ or @(^.)@.
     
     A more important difference the example reveals is in the types closely associated with
     the central type, @Producer Text m r@.  In @Data.Text@ and @Data.Text.Lazy@
@@ -55,6 +57,7 @@
     
 >   splitAt :: Int -> Text -> (Text, Text)
 >   lines :: Int -> Text -> [Text]
+>   chunksOf :: Int -> Text -> [Text]
 
     which relate a Text with a pair or list of Texts. The corresponding functions here (taking
     account of \'lensification\') are 
@@ -62,8 +65,9 @@
 >   view . splitAt :: (Monad m, Integral n) 
 >                  => n -> Producer Text m r -> Producer Text.Text m (Producer Text.Text m r)
 >   view lines :: Monad m => Producer Text m r -> FreeT (Producer Text m) m r
+>   view . chunksOf ::  (Monad m, Integral n) => n -> Producer Text m r -> FreeT (Producer Text m) m r
 
-    In the type @Producer Text.Text m (Producer Text.Text m r)@ the second 
+    In the type @Producer Text m (Producer Text m r)@ the second 
     element of the \'pair\' of of \'effectful Texts\' cannot simply be retrieved 
     with 'snd'. This is an \'effectful\' pair, and one must work through the effects
     of the first element to arrive at the second. Similarly in @FreeT (Producer Text m) m r@,
@@ -80,6 +84,7 @@
     
 >   view . splitAt :: (Monad m, Integral n) => n -> Text m r -> Text m (Text m r)
 >   view lines :: (Monad m) => Text m r -> Texts m r
+>   view . chunksOf :: (Monad m, Integral n) => n -> Text m r -> Texts m r
 
     which brings one closer to the types of the similar functions in @Data.Text.Lazy@
 
