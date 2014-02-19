@@ -290,7 +290,7 @@ unpack = for cat (\t -> yield (T.unpack t))
 
 -- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utilities, 
 -- here acting as 'Text' pipes, rather as they would  on a lazy text
-toCaseFold :: Monad m => Pipe Text Text m ()
+toCaseFold :: Monad m => Pipe Text Text m r
 toCaseFold = P.map T.toCaseFold
 {-# INLINEABLE toCaseFold #-}
 
@@ -300,7 +300,7 @@ toCaseFold = P.map T.toCaseFold
 
 
 -- | lowercase incoming 'Text'
-toLower :: Monad m => Pipe Text Text m ()
+toLower :: Monad m => Pipe Text Text m r
 toLower = P.map T.toLower
 {-# INLINEABLE toLower #-}
 

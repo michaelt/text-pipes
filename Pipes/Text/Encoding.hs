@@ -12,7 +12,7 @@ module Pipes.Text.Encoding
     -- $lenses
     Codec
     , decode
-    -- * Viewing the Text in a ByteString
+    -- * \'Viewing\' the Text in a byte stream
     -- $codecs
     , utf8
     , utf8Pure
@@ -56,7 +56,6 @@ import Data.Text.StreamDecoding
 import Control.Monad (join)
 import Data.Word (Word8)
 import Pipes
-
 
 type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 
@@ -131,11 +130,11 @@ decode codec a = getConstant (codec Constant a)
 
 >   zoom utf8 drawChar :: Monad m => StateT (Producer ByteString m r) m (Maybe Char)
 
-    or, with the type synonymn of @Pipes.Parse@:
+    or, using the type synonymn from @Pipes.Parse@:
     
 >   zoom utf8 drawChar :: Monad m => Parser ByteString m (Maybe Char)
 
-    Thus we can define ByteString like this:
+    Thus we can define a ByteString parser like this:
     
 >   withNextByte :: Parser ByteString m (Maybe Char, Maybe Word8))) 
 >   withNextByte = do char_ <- zoom utf8 Text.drawChar

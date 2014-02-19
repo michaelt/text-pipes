@@ -81,11 +81,11 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 
     * Like the functions in @Data.Text.IO@, they attempt to work with the system encoding. 
   
-    * Like the functions in @Data.Text.IO@, they are slower than ByteString operations. Where
+    * Like the functions in @Data.Text.IO@, they significantly slower than ByteString operations. Where
        you know what encoding you are working with, use @Pipes.ByteString@ and @Pipes.Text.Encoding@ instead,
        e.g. @view utf8 Bytes.stdin@ instead of @Text.stdin@
   
-    * Like the functions in  @Data.Text.IO@ , they use Text exceptions. 
+    * Like the functions in  @Data.Text.IO@ , they use Text exceptions, not the standard Pipes protocols. 
 
    Something like 
  
