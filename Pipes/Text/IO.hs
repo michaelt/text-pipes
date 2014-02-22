@@ -35,17 +35,15 @@ import Prelude hiding (readFile, writeFile)
 {- $textio
     Where pipes IO replaces lazy IO, @Producer Text m r@ replaces lazy 'Text'. 
     This module exports some convenient functions for producing and consuming 
-    pipes 'Text' in IO, with caveats described below. 
+    pipes 'Text' in IO, namely, 'readFile', 'writeFile', 'fromHandle', 'toHandle', 
+    'stdin' and 'stdout'.  Some caveats described below. 
     
     The main points are as in 
     <https://hackage.haskell.org/package/pipes-bytestring-1.0.0/docs/Pipes-ByteString.html Pipes.ByteString>
     
     An 'IO.Handle' can be associated with a 'Producer' or 'Consumer' according 
     as it is read or written to.
-
-    To stream to or from 'IO.Handle's, one can use 'fromHandle' or 'toHandle'.  For
-    example, the following program copies a document from one file to another:
-
+    
 > import Pipes
 > import qualified Pipes.Text as Text
 > import qualified Pipes.Text.IO as Text
@@ -65,10 +63,11 @@ To stream from files, the following is perhaps more Prelude-like (note that it u
 >
 > main = runSafeT $ runEffect $ Text.readFile "inFile.txt" >-> Text.writeFile "outFile.txt"
 
-    You can stream to and from 'stdin' and 'stdout' using the predefined 'stdin'
+    Finally, you can stream to and from 'stdin' and 'stdout' using the predefined 'stdin'
     and 'stdout' pipes, as with the following \"echo\" program:
 
 > main = runEffect $ Text.stdin >-> Text.stdout
+
 
 -}
 
