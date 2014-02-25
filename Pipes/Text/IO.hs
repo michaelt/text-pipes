@@ -33,9 +33,9 @@ import Pipes.Safe (MonadSafe(..), Base(..))
 import Prelude hiding (readFile, writeFile)
 
 {- $textio
-    Where pipes IO replaces lazy IO, @Producer Text m r@ replaces lazy 'Text'. 
+    Where pipes @IO@ replaces lazy @IO@, @Producer Text IO r@ replaces lazy 'Text'. 
     This module exports some convenient functions for producing and consuming 
-    pipes 'Text' in IO, namely, 'readFile', 'writeFile', 'fromHandle', 'toHandle', 
+    pipes 'Text' in @IO@, namely, 'readFile', 'writeFile', 'fromHandle', 'toHandle', 
     'stdin' and 'stdout'.  Some caveats described below. 
     
     The main points are as in 
