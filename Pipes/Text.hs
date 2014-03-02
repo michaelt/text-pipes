@@ -137,10 +137,10 @@ import Prelude hiding (
 
     * /I. Effectful Text/
 
-    This package provides @pipes@ utilities for /text streams/, understood as
-    streams of 'Text' chunks. The individual chunks are uniformly /strict/, and thus you 
-    will generally want @Data.Text@ in scope.  But the type @Producer Text m r@ as we
-    are using it is a sort of pipes equivalent of the lazy @Text@ type. 
+    This package provides @pipes@ utilities for /text streams/ or /character streams/, 
+    realized as streams of 'Text' chunks. The individual chunks are uniformly /strict/, 
+    and thus you will generally want @Data.Text@ in scope.  But the type 
+    @Producer Text m r@ ,as we are using it, is a sort of /pipes/ equivalent of the lazy @Text@ type. 
     
     This particular module provides many functions equivalent in one way or another to 
     the pure functions in 
@@ -210,7 +210,7 @@ import Prelude hiding (
     would drop the leading white space from each line. 
 
     The lenses in this library are marked as /improper/; this just means that 
-    they don't admit all the operations of an ideal lens, but only "getting" and "focussing". 
+    they don't admit all the operations of an ideal lens, but only /getting/ and /focusing/. 
     Just for this reason, though, the magnificent complexities of the lens libraries 
     are a distraction. The lens combinators to keep in mind, the ones that make sense for 
     our lenses, are @view@ \/ @(^.)@), @over@ \/ @(%~)@ , and @zoom@. 
@@ -252,13 +252,18 @@ import Prelude hiding (
     contain at the start. Then we might write something like this:
 
 >     obey :: Monad m => Producer Text m b -> Producer Text m b
->     obey p = do (ts, p') <- lift $ runStateT (zoom (Text.splitAt 8) drawAll) p
+>     obey p = do (ts, p') <- lift $ runStateT (zoom (Text.splitAt 7) drawAll) p
 >                 let seven = T.concat ts
 >                 case T.toUpper seven of 
 >                    "TOUPPER" -> p' >-> Text.toUpper
 >                    "TOLOWER" -> p' >-> Text.toLower
 >                    _         -> do yield seven
 >                                    p'
+
+
+> >>> let doc = each ["toU","pperTh","is document.\n"]
+> >>> runEffect $ obey doc >-> Text.stdout
+> THIS DOCUMENT.
 
     The purpose of exporting lenses is the mental economy achieved with this three-way 
     applicability. That one expression, e.g. @lines@ or @splitAt 17@ can have these 
@@ -314,7 +319,7 @@ import Prelude hiding (
 
 >    join :: Monad m => Producer Text m (Producer m r) -> Producer m r
 
-    The return type of 'lines', 'words', 'chunksOf' and the other "splitter" functions,
+    The return type of 'lines', 'words', 'chunksOf' and the other /splitter/ functions,
     @FreeT (Producer m Text) m r@ -- our @Texts m r@ -- is the type of (effectful)
     lists of (effectful) texts. The type @([Text],r)@ might be seen to gather
     together things of the forms:
@@ -368,7 +373,7 @@ import Prelude hiding (
     of @FreeT (Producer Text m) m r@ is simply the 'effectful' version of this. 
     
     The @Pipes.Group@ module, which can generally be imported without qualification,
-    provides many functions for working with things of type @FreeT (Producer a m) m r@
+    provides many functions for working with things of type @FreeT (Producer a m) m r@.
     In particular it conveniently exports the constructors for @FreeT@ and the associated
     @FreeF@ type -- a fancy form of @Either@, namely 
     

@@ -39,9 +39,9 @@ import Prelude hiding (readFile, writeFile)
     'stdin' and 'stdout'.  Some caveats described below. 
     
     The main points are as in 
-    <https://hackage.haskell.org/package/pipes-bytestring-1.0.0/docs/Pipes-ByteString.html Pipes.ByteString>
+    <https://hackage.haskell.org/package/pipes-bytestring-1.0.0/docs/Pipes-ByteString.html Pipes.ByteString>:
     
-    An 'IO.Handle' can be associated with a 'Producer' or 'Consumer' according 
+    A 'Handle' can be associated with a 'Producer' or 'Consumer' according 
     as it is read or written to.
     
 > import Pipes
