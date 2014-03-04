@@ -2,8 +2,23 @@
 
 
 module Pipes.Text  (
-    -- * Introduction
+    -- * Effectful Text
     -- $intro
+    
+    -- * Lenses
+    -- $lenses
+    
+    -- ** @view@ \/ @(^.)@
+    -- $view
+
+    -- ** @over@ \/ @(%~)@
+    -- $over
+    
+    -- ** @zoom@
+    -- $zoom
+    
+    -- * Special types: @Producer Text m (Producer Text m r)@ and @FreeT (Producer Text m) m r@
+    -- $special
     
     -- * Producers
     fromLazy
@@ -134,9 +149,6 @@ import Prelude hiding (
     writeFile )
 
 {- $intro
-
-    * /I. Effectful Text/
-
     This package provides @pipes@ utilities for /text streams/ or /character streams/, 
     realized as streams of 'Text' chunks. The individual chunks are uniformly /strict/, 
     and thus you will generally want @Data.Text@ in scope.  But the type 
@@ -178,8 +190,8 @@ import Prelude hiding (
     The above program will never bring more than one chunk of text (~ 32 KB) into
     memory, no matter how long the lines are.
 
-    * /II. Lenses/
-
+-}
+{- $lenses
     As this example shows, one superficial difference from @Data.Text.Lazy@ 
     is that many of the operations, like 'lines', are \'lensified\'; this has a 
     number of advantages (where it is possible); in particular it facilitates their 
@@ -197,7 +209,7 @@ import Prelude hiding (
     
     > view (splitAt 17) producer
     
-    or 
+    or equivalently
     
     > producer ^. splitAt 17
 
@@ -216,8 +228,10 @@ import Prelude hiding (
     our lenses, are @view@ \/ @(^.)@), @over@ \/ @(%~)@ , and @zoom@. 
 
     One need only keep in mind that if @l@ is a @Lens' a b@, then:
-    
-    - @view l@ is a function @a -> b@ . Thus @view l a@ (also written @a ^. l@ ) 
+
+-}
+{- $view
+    @view l@ is a function @a -> b@ . Thus @view l a@ (also written @a ^. l@ ) 
     is the corresponding @b@; as was said above, this function will be exactly the 
     function you think it is, given its name. Thus to uppercase the first n characters 
     of a Producer, leaving the rest the same, we could write: 
@@ -225,9 +239,9 @@ import Prelude hiding (
 
     > upper n p = do p' <- p ^. Text.splitAt n >-> Text.toUpper
     >                p'
-
-
-    - @over l@ is a function @(b -> b) -> a -> a@.  Thus, given a function that modifies
+-}
+{- $over
+    @over l@ is a function @(b -> b) -> a -> a@.  Thus, given a function that modifies
     @b@s, the lens lets us modify an @a@ by applying @f :: b -> b@ to 
     the @b@ that we can \"see\" through the lens. So  @over l f :: a -> a@ 
     (it can also be written @l %~ f@). 
@@ -237,8 +251,10 @@ import Prelude hiding (
     > stripLines = Text.lines %~ maps (>-> Text.stripStart)
     > stripLines = over Text.lines (maps (>-> Text.stripStart))
     > upper n    =  Text.splitAt n %~ (>-> Text.toUpper)
-      
-    - @zoom l@, finally, is a function from a @Parser b m r@  
+
+-}
+{- $zoom
+    @zoom l@, finally, is a function from a @Parser b m r@  
     to a @Parser a m r@ (or more generally a @StateT (Producer b m x) m r@).  
     Its use is easiest to see with an decoding lens like 'utf8', which
     \"sees\" a Text producer hidden inside a ByteString producer:
@@ -278,9 +294,8 @@ import Prelude hiding (
     in <http://hackage.haskell.org/package/pipes-parse-3.0.1/docs/Pipes-Parse-Tutorial.html Pipes.Parse.Tutorial> 
     and to some extent in the @Pipes.Text.Encoding@ module here. 
 
-
-    * /III.  Special types:/ @Producer Text m (Producer Text m r)@ /and/ @FreeT (Producer Text m) m r@
-    
+-}
+{- $special
     These simple 'lines' examples reveal a more important difference from @Data.Text.Lazy@ . 
     This is in the types that are most closely associated with our central text type, 
     @Producer Text m r@.  In @Data.Text@ and @Data.Text.Lazy@ we find functions like
