@@ -1,3 +1,7 @@
+# Version 0.0.0.11
+
+* Updated to use streaming-commons in place of text-stream-decoding.
+
 # Version 0.0.0.10
 
 * Documentation changes.
