@@ -52,7 +52,8 @@ import Data.ByteString.Char8 as B8
 import Data.Text (Text)
 import qualified Data.Text as T 
 import qualified Data.Text.Encoding as TE 
-import Data.Text.StreamDecoding
+import qualified Data.Streaming.Text as Stream
+import Data.Streaming.Text (DecodeResult(..))
 import Control.Monad (join)
 import Data.Word (Word8)
 import Pipes
@@ -202,27 +203,27 @@ decodeStream = loop where
 
 
 decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8 = decodeStream streamUtf8
+decodeUtf8 = decodeStream Stream.decodeUtf8
 {-# INLINE decodeUtf8 #-}
 
 decodeUtf8Pure :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf8Pure = decodeStream streamUtf8Pure
+decodeUtf8Pure = decodeStream Stream.decodeUtf8Pure
 {-# INLINE decodeUtf8Pure #-}
 
 decodeUtf16LE :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf16LE = decodeStream streamUtf16LE
+decodeUtf16LE = decodeStream Stream.decodeUtf16LE
 {-# INLINE decodeUtf16LE #-}
 
 decodeUtf16BE :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf16BE = decodeStream streamUtf16BE
+decodeUtf16BE = decodeStream Stream.decodeUtf16BE
 {-# INLINE decodeUtf16BE #-}
 
 decodeUtf32LE :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf32LE = decodeStream streamUtf32LE
+decodeUtf32LE = decodeStream Stream.decodeUtf32LE
 {-# INLINE decodeUtf32LE #-}
 
 decodeUtf32BE :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)
-decodeUtf32BE = decodeStream streamUtf32BE
+decodeUtf32BE = decodeStream Stream.decodeUtf32BE
 {-# INLINE decodeUtf32BE #-}
 
 
