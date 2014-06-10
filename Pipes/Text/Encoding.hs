@@ -41,10 +41,13 @@ module Pipes.Text.Encoding
     , decodeAscii
     , encodeIso8859_1
     , decodeIso8859_1
+    , Lens'_
+    , Iso'_
     ) 
     where
 
 import Data.Functor.Constant (Constant(..))
+import Data.Profunctor (Profunctor)
 import Data.Char (ord)
 import Data.ByteString as B 
 import Data.ByteString (ByteString)
@@ -58,15 +61,16 @@ import Control.Monad (join)
 import Data.Word (Word8)
 import Pipes
 
-type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
+type Lens'_ a b = forall f . Functor f => (b -> f b) -> (a -> f a)
+type Iso'_ a b = forall f p . (Functor f, Profunctor p) => p b (f b) -> p a (f a)
 
 {- $lenses
     The 'Codec' type is a simple specializion of 
-    the @Lens'@ type synonymn used by the standard lens libraries, 
+    the @Lens'_@ type synonymn used by the standard lens libraries, 
     <http://hackage.haskell.org/package/lens lens> and 
     <http://hackage.haskell.org/package/lens-family lens-family>. That type, 
     
->   type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
+>   type Lens'_ a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 
     is just an alias for a Prelude type. Thus you use any particular codec with
     the @view@ / @(^.)@ , @zoom@ and @over@ functions from either of those libraries;
@@ -77,7 +81,7 @@ type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 type Codec
     =  forall m r
     .  Monad m
-    => Lens' (Producer ByteString m r)
+    => Lens'_ (Producer ByteString m r)
              (Producer Text m (Producer ByteString m r))
 
 {- | 'decode' is just the ordinary @view@ or @(^.)@ of the lens libraries;

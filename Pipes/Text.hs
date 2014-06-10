@@ -104,7 +104,6 @@ import Control.Monad.Trans.State.Strict (StateT(..), modify)
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Text.Lazy as TL
-import Data.Text.Lazy.Internal (foldrChunks, defaultChunkSize)
 import Data.ByteString (ByteString)
 import Data.Functor.Constant (Constant(Constant, getConstant))
 import Data.Functor.Identity (Identity)
@@ -115,10 +114,12 @@ import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
+import Pipes.Text.Encoding (Lens'_, Iso'_)
 import qualified Pipes.Prelude as P
 import Data.Char (isSpace)
 import Data.Word (Word8)
-
+import Foreign.Storable (sizeOf)
+import Data.Bits (shiftL)
 import Prelude hiding (
     all,
     any,
@@ -227,7 +228,7 @@ import Prelude hiding (
     are a distraction. The lens combinators to keep in mind, the ones that make sense for 
     our lenses, are @view@ \/ @(^.)@), @over@ \/ @(%~)@ , and @zoom@. 
 
-    One need only keep in mind that if @l@ is a @Lens' a b@, then:
+    One need only keep in mind that if @l@ is a @Lens'_ a b@, then:
 
 -}
 {- $view
@@ -365,7 +366,7 @@ import Prelude hiding (
 
     One might think that 
 
->   lines :: Monad m => Lens' (Producer Text m r) (FreeT (Producer Text m) m r)
+>   lines :: Monad m => Lens'_ (Producer Text m r) (FreeT (Producer Text m) m r)
 >   view . lines :: Monad m => Producer Text m r -> FreeT (Producer Text m) m r
 
     should really have the type
@@ -419,13 +420,9 @@ import Prelude hiding (
 
 -- | Convert a lazy 'TL.Text' into a 'Producer' of strict 'Text's
 fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
-fromLazy  = foldrChunks (\e a -> yield e >> a) (return ()) 
+fromLazy  = TL.foldrChunks (\e a -> yield e >> a) (return ()) 
 {-# INLINE fromLazy #-}
 
-
-type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
-
-type Iso' a b = forall f p . (Functor f, Profunctor p) => p b (f b) -> p a (f a)
 
 (^.) :: a -> ((b -> Constant b b) -> (a -> Constant b a)) -> b
 a ^. lens = getConstant (lens Constant a)
@@ -788,7 +785,7 @@ isEndOfChars = do
 splitAt
     :: (Monad m, Integral n)
     => n
-    -> Lens' (Producer Text m r)
+    -> Lens'_ (Producer Text m r)
              (Producer Text m (Producer Text m r))
 splitAt n0 k p0 = fmap join (k (go n0 p0))
   where
@@ -817,7 +814,7 @@ splitAt n0 k p0 = fmap join (k (go n0 p0))
 span
     :: (Monad m)
     => (Char -> Bool)
-    -> Lens' (Producer Text m r)
+    -> Lens'_ (Producer Text m r)
              (Producer Text m (Producer Text m r))
 span predicate k p0 = fmap join (k (go p0))
   where
@@ -842,7 +839,7 @@ span predicate k p0 = fmap join (k (go p0))
 break
     :: (Monad m)
     => (Char -> Bool)
-    -> Lens' (Producer Text m r)
+    -> Lens'_ (Producer Text m r)
              (Producer Text m (Producer Text m r))
 break predicate = span (not . predicate)
 {-# INLINABLE break #-}
@@ -853,7 +850,7 @@ break predicate = span (not . predicate)
 groupBy
     :: (Monad m)
     => (Char -> Char -> Bool)
-    -> Lens' (Producer Text m r)
+    -> Lens'_ (Producer Text m r)
              (Producer Text m (Producer Text m r))
 groupBy equals k p0 = fmap join (k ((go p0))) where
     go p = do
@@ -867,7 +864,7 @@ groupBy equals k p0 = fmap join (k ((go p0))) where
 
 -- | Improper lens that splits after the first succession of identical 'Char' s
 group :: Monad m 
-      => Lens' (Producer Text m r)
+      => Lens'_ (Producer Text m r)
                (Producer Text m (Producer Text m r))
 group = groupBy (==)
 {-# INLINABLE group #-}
@@ -877,7 +874,7 @@ group = groupBy (==)
     Unlike 'words', this does not drop leading whitespace 
 -}
 word :: (Monad m) 
-     => Lens' (Producer Text m r)
+     => Lens'_ (Producer Text m r)
               (Producer Text m (Producer Text m r))
 word k p0 = fmap join (k (to p0))
   where
@@ -888,7 +885,7 @@ word k p0 = fmap join (k (to p0))
 
 
 line :: (Monad m) 
-     => Lens' (Producer Text m r)
+     => Lens'_ (Producer Text m r)
               (Producer Text m (Producer Text m r))
 line = break (== '\n')
 
@@ -920,7 +917,7 @@ intersperse c = go0
 
 
 -- | Improper isomorphism between a 'Producer' of 'ByteString's and 'Word8's
-packChars :: Monad m => Iso' (Producer Char m x) (Producer Text m x)
+packChars :: Monad m => Iso'_ (Producer Char m x) (Producer Text m x)
 packChars = Data.Profunctor.dimap to (fmap from)
   where
     -- to :: Monad m => Producer Char m x -> Producer Text m x
@@ -932,13 +929,16 @@ packChars = Data.Profunctor.dimap to (fmap from)
 
     -- from :: Monad m => Producer Text m x -> Producer Char m x
     from p = for p (each . T.unpack)
+    
 {-# INLINABLE packChars #-}
 
+defaultChunkSize :: Int
+defaultChunkSize = 16384 - (sizeOf (undefined :: Int) `shiftL` 1)
 
 -- | Split a text stream into 'FreeT'-delimited text streams of fixed size
 chunksOf
     :: (Monad m, Integral n)
-    => n -> Lens' (Producer Text m r) 
+    => n -> Lens'_ (Producer Text m r) 
                   (FreeT (Producer Text m) m r)
 chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
   where
@@ -984,7 +984,7 @@ splitsWith predicate p0 = FreeT (go0 p0)
 -- | Split a text stream using the given 'Char' as the delimiter
 splits :: (Monad m)
       => Char
-      -> Lens' (Producer Text m r)
+      -> Lens'_ (Producer Text m r)
                (FreeT (Producer Text m) m r)
 splits c k p =
           fmap (PG.intercalates (yield (T.singleton c))) (k (splitsWith (c ==) p))
@@ -996,7 +996,7 @@ splits c k p =
 groupsBy
     :: Monad m
     => (Char -> Char -> Bool)
-    -> Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
+    -> Lens'_ (Producer Text m x) (FreeT (Producer Text m) m x)
 groupsBy equals k p0 = fmap concats (k (FreeT (go p0))) where 
   go p = do x <- next p
             case x of Left   r       -> return (Pure r)
@@ -1011,7 +1011,7 @@ groupsBy equals k p0 = fmap concats (k (FreeT (go p0))) where
 -- | Like 'groupsBy', where the equality predicate is ('==')
 groups
     :: Monad m
-    => Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
+    => Lens'_ (Producer Text m x) (FreeT (Producer Text m) m x)
 groups = groupsBy (==)
 {-# INLINABLE groups #-}
 
@@ -1020,7 +1020,7 @@ groups = groupsBy (==)
 {-| Split a text stream into 'FreeT'-delimited lines
 -}
 lines
-    :: (Monad m) => Iso' (Producer Text m r)  (FreeT (Producer Text m) m r)
+    :: (Monad m) => Iso'_ (Producer Text m r)  (FreeT (Producer Text m) m r)
 lines = Data.Profunctor.dimap _lines (fmap _unlines)
   where
   _lines p0 = FreeT (go0 p0) 
@@ -1051,7 +1051,7 @@ lines = Data.Profunctor.dimap _lines (fmap _unlines)
 
 -- | Split a text stream into 'FreeT'-delimited words
 words
-    :: (Monad m) => Iso' (Producer Text m r) (FreeT (Producer Text m) m r)
+    :: (Monad m) => Iso'_ (Producer Text m r) (FreeT (Producer Text m) m r)
 words = Data.Profunctor.dimap go (fmap _unwords)
   where
     go p = FreeT $ do
