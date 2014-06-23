@@ -64,9 +64,6 @@ import Pipes
 type Lens'_ a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 type Iso'_ a b = forall f p . (Functor f, Profunctor p) => p b (f b) -> p a (f a)
 
-type Lens s t a b = forall f . Functor f => (a -> f b) -> (s -> f t)
-
-
 {- $lenses
     The 'Codec' type is a simple specializion of 
     the @Lens'_@ type synonymn used by the standard lens libraries, 
@@ -82,12 +79,11 @@ type Lens s t a b = forall f . Functor f => (a -> f b) -> (s -> f t)
     -}
 
 type Codec
-    =  forall m x y 
+    =  forall m r
     .  Monad m
-    => Lens (Producer ByteString m x)
-            (Producer ByteString m y)
-            (Producer Text m (Producer ByteString m x))
-            (Producer Text m (Producer ByteString m y))
+    => Lens'_ (Producer ByteString m r)
+             (Producer Text m (Producer ByteString m r))
+
 {- | 'decode' is just the ordinary @view@ or @(^.)@ of the lens libraries;
       exported here under a name appropriate to the material. All of these are
       the same: 
