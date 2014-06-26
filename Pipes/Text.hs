@@ -114,7 +114,6 @@ import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
-import Pipes.Text.Encoding (Lens'_, Iso'_)
 import qualified Pipes.Prelude as P
 import Data.Char (isSpace)
 import Data.Word (Word8)
@@ -228,7 +227,7 @@ import Prelude hiding (
     are a distraction. The lens combinators to keep in mind, the ones that make sense for 
     our lenses, are @view@ \/ @(^.)@), @over@ \/ @(%~)@ , and @zoom@. 
 
-    One need only keep in mind that if @l@ is a @Lens'_ a b@, then:
+    One need only keep in mind that if @l@ is a @Lens' a b@, then:
 
 -}
 {- $view
@@ -366,7 +365,7 @@ import Prelude hiding (
 
     One might think that 
 
->   lines :: Monad m => Lens'_ (Producer Text m r) (FreeT (Producer Text m) m r)
+>   lines :: Monad m => Lens' (Producer Text m r) (FreeT (Producer Text m) m r)
 >   view . lines :: Monad m => Producer Text m r -> FreeT (Producer Text m) m r
 
     should really have the type
@@ -423,19 +422,13 @@ fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
 fromLazy  = TL.foldrChunks (\e a -> yield e >> a) (return ()) 
 {-# INLINE fromLazy #-}
 
-
 (^.) :: a -> ((b -> Constant b b) -> (a -> Constant b a)) -> b
 a ^. lens = getConstant (lens Constant a)
-
 
 -- | Apply a transformation to each 'Char' in the stream
 map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
 map f = P.map (T.map f)
 {-# INLINABLE map #-}
-
-{-# RULES "p >-> map f" forall p f .
-        p >-> map f = for p (\txt -> yield (T.map f txt))
-  #-}
 
 -- | Map a function over the characters of a text stream and concatenate the results
 concatMap
@@ -443,28 +436,15 @@ concatMap
 concatMap f = P.map (T.concatMap f)
 {-# INLINABLE concatMap #-}
 
-{-# RULES "p >-> concatMap f" forall p f .
-        p >-> concatMap f = for p (\txt -> yield (T.concatMap f txt))
-  #-}
-
-
 -- | Transform a Pipe of 'String's into one of 'Text' chunks
 pack :: Monad m => Pipe String Text m r
 pack = P.map T.pack
 {-# INLINEABLE pack #-}
 
-{-# RULES "p >-> pack" forall p .
-        p >-> pack = for p (\txt -> yield (T.pack txt))
-  #-}
-
 -- | Transform a Pipes of 'Text' chunks into one of 'String's
 unpack :: Monad m => Pipe Text String m r
 unpack = for cat (\t -> yield (T.unpack t))
 {-# INLINEABLE unpack #-}
-
-{-# RULES "p >-> unpack" forall p .
-        p >-> unpack = for p (\txt -> yield (T.unpack txt))
-  #-}
 
 -- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utilities, 
 -- here acting as 'Text' pipes, rather as they would  on a lazy text
@@ -472,28 +452,15 @@ toCaseFold :: Monad m => Pipe Text Text m r
 toCaseFold = P.map T.toCaseFold
 {-# INLINEABLE toCaseFold #-}
 
-{-# RULES "p >-> toCaseFold" forall p .
-        p >-> toCaseFold = for p (\txt -> yield (T.toCaseFold txt))
-  #-}
-
-
 -- | lowercase incoming 'Text'
 toLower :: Monad m => Pipe Text Text m r
 toLower = P.map T.toLower
 {-# INLINEABLE toLower #-}
 
-{-# RULES "p >-> toLower" forall p .
-        p >-> toLower = for p (\txt -> yield (T.toLower txt))
-  #-}
-
 -- | uppercase incoming 'Text'
 toUpper :: Monad m => Pipe Text Text m r
 toUpper = P.map T.toUpper
 {-# INLINEABLE toUpper #-}
-
-{-# RULES "p >-> toUpper" forall p .
-        p >-> toUpper = for p (\txt -> yield (T.toUpper txt))
-  #-}
 
 -- | Remove leading white space from an incoming succession of 'Text's 
 stripStart :: Monad m => Pipe Text Text m r
@@ -568,10 +535,6 @@ filter :: (Monad m) => (Char -> Bool) -> Pipe Text Text m r
 filter predicate = P.map (T.filter predicate)
 {-# INLINABLE filter #-}
 
-{-# RULES "p >-> filter q" forall p q .
-        p >-> filter q = for p (\txt -> yield (T.filter q txt))
-  #-}
-  
 -- | Strict left scan over the characters
 scan
     :: (Monad m)
@@ -785,7 +748,7 @@ isEndOfChars = do
 splitAt
     :: (Monad m, Integral n)
     => n
-    -> Lens'_ (Producer Text m r)
+    -> Lens' (Producer Text m r)
              (Producer Text m (Producer Text m r))
 splitAt n0 k p0 = fmap join (k (go n0 p0))
   where
@@ -814,7 +777,7 @@ splitAt n0 k p0 = fmap join (k (go n0 p0))
 span
     :: (Monad m)
     => (Char -> Bool)
-    -> Lens'_ (Producer Text m r)
+    -> Lens' (Producer Text m r)
              (Producer Text m (Producer Text m r))
 span predicate k p0 = fmap join (k (go p0))
   where
@@ -839,7 +802,7 @@ span predicate k p0 = fmap join (k (go p0))
 break
     :: (Monad m)
     => (Char -> Bool)
-    -> Lens'_ (Producer Text m r)
+    -> Lens' (Producer Text m r)
              (Producer Text m (Producer Text m r))
 break predicate = span (not . predicate)
 {-# INLINABLE break #-}
@@ -850,7 +813,7 @@ break predicate = span (not . predicate)
 groupBy
     :: (Monad m)
     => (Char -> Char -> Bool)
-    -> Lens'_ (Producer Text m r)
+    -> Lens' (Producer Text m r)
              (Producer Text m (Producer Text m r))
 groupBy equals k p0 = fmap join (k ((go p0))) where
     go p = do
@@ -864,7 +827,7 @@ groupBy equals k p0 = fmap join (k ((go p0))) where
 
 -- | Improper lens that splits after the first succession of identical 'Char' s
 group :: Monad m 
-      => Lens'_ (Producer Text m r)
+      => Lens' (Producer Text m r)
                (Producer Text m (Producer Text m r))
 group = groupBy (==)
 {-# INLINABLE group #-}
@@ -874,7 +837,7 @@ group = groupBy (==)
     Unlike 'words', this does not drop leading whitespace 
 -}
 word :: (Monad m) 
-     => Lens'_ (Producer Text m r)
+     => Lens' (Producer Text m r)
               (Producer Text m (Producer Text m r))
 word k p0 = fmap join (k (to p0))
   where
@@ -885,7 +848,7 @@ word k p0 = fmap join (k (to p0))
 
 
 line :: (Monad m) 
-     => Lens'_ (Producer Text m r)
+     => Lens' (Producer Text m r)
               (Producer Text m (Producer Text m r))
 line = break (== '\n')
 
@@ -915,7 +878,6 @@ intersperse c = go0
 {-# INLINABLE intersperse #-}
 
 
-
 -- | Improper isomorphism between a 'Producer' of 'ByteString's and 'Word8's
 packChars :: Monad m => Iso'_ (Producer Char m x) (Producer Text m x)
 packChars = Data.Profunctor.dimap to (fmap from)
@@ -929,7 +891,6 @@ packChars = Data.Profunctor.dimap to (fmap from)
 
     -- from :: Monad m => Producer Text m x -> Producer Char m x
     from p = for p (each . T.unpack)
-    
 {-# INLINABLE packChars #-}
 
 defaultChunkSize :: Int
@@ -938,7 +899,7 @@ defaultChunkSize = 16384 - (sizeOf (undefined :: Int) `shiftL` 1)
 -- | Split a text stream into 'FreeT'-delimited text streams of fixed size
 chunksOf
     :: (Monad m, Integral n)
-    => n -> Lens'_ (Producer Text m r) 
+    => n -> Lens' (Producer Text m r) 
                   (FreeT (Producer Text m) m r)
 chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
   where
@@ -984,7 +945,7 @@ splitsWith predicate p0 = FreeT (go0 p0)
 -- | Split a text stream using the given 'Char' as the delimiter
 splits :: (Monad m)
       => Char
-      -> Lens'_ (Producer Text m r)
+      -> Lens' (Producer Text m r)
                (FreeT (Producer Text m) m r)
 splits c k p =
           fmap (PG.intercalates (yield (T.singleton c))) (k (splitsWith (c ==) p))
@@ -996,7 +957,7 @@ splits c k p =
 groupsBy
     :: Monad m
     => (Char -> Char -> Bool)
-    -> Lens'_ (Producer Text m x) (FreeT (Producer Text m) m x)
+    -> Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
 groupsBy equals k p0 = fmap concats (k (FreeT (go p0))) where 
   go p = do x <- next p
             case x of Left   r       -> return (Pure r)
@@ -1011,7 +972,7 @@ groupsBy equals k p0 = fmap concats (k (FreeT (go p0))) where
 -- | Like 'groupsBy', where the equality predicate is ('==')
 groups
     :: Monad m
-    => Lens'_ (Producer Text m x) (FreeT (Producer Text m) m x)
+    => Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
 groups = groupsBy (==)
 {-# INLINABLE groups #-}
 
@@ -1044,7 +1005,6 @@ lines = Data.Profunctor.dimap _lines (fmap _unlines)
   --     :: Monad m
   --      => FreeT (Producer Text m) m x -> Producer Text m x
   _unlines = concats . PG.maps (<* yield (T.singleton '\n'))
-  
 
 {-# INLINABLE lines #-}
 
@@ -1125,3 +1085,4 @@ unwords = intercalate (yield $ T.singleton ' ')
 -}
 
 
+type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)

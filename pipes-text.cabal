@@ -1,5 +1,5 @@
 name:                pipes-text
-version:             0.0.0.11
+version:             0.0.0.12
 synopsis:            Text pipes.
 description:         * This package will be in a draft, or testing, phase until version 0.0.1. Please report any installation difficulties, or any wisdom about the api, on the github page or the <https://groups.google.com/forum/#!forum/haskell-pipes pipes list>
                      .
@@ -43,7 +43,7 @@ library
                        pipes-group       >= 1.0.0   && < 1.1 ,
                        pipes-parse       >= 3.0.0   && < 3.1 ,
                        pipes-safe        >= 2.1     && < 2.3 , 
-                       pipes-bytestring  >= 1.0     && < 2.1 ,
+                       pipes-bytestring  >= 1.0     && < 2.2 ,
                        transformers      >= 0.2.0.0 && < 0.5
 
   other-extensions:    RankNTypes
