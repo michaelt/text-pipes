@@ -1,3 +1,9 @@
+# Version 0.0.0.12
+
+* Opposing lenses for `lines` and `unlines` and `words` and `unwords`. 
+  Brought closer in line with `pipes-bytestring` again. Removed `count`, which
+  was wrong. Scrapped `Iso` and the `profunctors` dependency. 
+
 # Version 0.0.0.11
 
 * Updated to use streaming-commons in place of text-stream-decoding.

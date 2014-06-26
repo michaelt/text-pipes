@@ -1,25 +1,24 @@
 {-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Trustworthy #-}
 
-
 module Pipes.Text  (
     -- * Effectful Text
     -- $intro
-    
+
     -- * Lenses
     -- $lenses
-    
+
     -- ** @view@ \/ @(^.)@
     -- $view
 
     -- ** @over@ \/ @(%~)@
     -- $over
-    
+
     -- ** @zoom@
     -- $zoom
-    
+
     -- * Special types: @Producer Text m (Producer Text m r)@ and @FreeT (Producer Text m) m r@
     -- $special
-    
+
     -- * Producers
     fromLazy
 
@@ -27,17 +26,13 @@ module Pipes.Text  (
     , map
     , concatMap
     , take
-    , drop
     , takeWhile
-    , dropWhile
     , filter
-    , scan
-    , pack
-    , unpack
     , toCaseFold
     , toLower
     , toUpper
     , stripStart
+    , scan
 
     -- * Folds
     , toLazy
@@ -53,7 +48,6 @@ module Pipes.Text  (
     , minimum
     , find
     , index
-    , count
 
     -- * Primitive Character Parsers
     , nextChar
@@ -62,7 +56,7 @@ module Pipes.Text  (
     , peekChar
     , isEndOfChars
 
-    -- * Parsing Lenses 
+    -- * Parsing Lenses
     , splitAt
     , span
     , break
@@ -71,34 +65,34 @@ module Pipes.Text  (
     , word
     , line
 
-    -- * FreeT Splitters
+    -- * Transforming Text and Character Streams
+    , drop
+    , dropWhile
+    , pack
+    , unpack
+    , intersperse
+
+    -- * FreeT Transformations
     , chunksOf
     , splitsWith
     , splits
     , groupsBy
     , groups
     , lines
-    , words
-
-    -- * Transformations
-    , intersperse
-    , packChars
-    
-    -- * Joiners
-    , intercalate
     , unlines
+    , words
     , unwords
+    , intercalate
 
     -- * Re-exports
     -- $reexports
     , module Data.ByteString
     , module Data.Text
-    , module Data.Profunctor
     , module Pipes.Parse
     , module Pipes.Group
     ) where
 
-import Control.Applicative ((<*)) 
+import Control.Applicative ((<*))
 import Control.Monad (liftM, join)
 import Control.Monad.Trans.State.Strict (StateT(..), modify)
 import qualified Data.Text as T
@@ -107,10 +101,9 @@ import qualified Data.Text.Lazy as TL
 import Data.ByteString (ByteString)
 import Data.Functor.Constant (Constant(Constant, getConstant))
 import Data.Functor.Identity (Identity)
-import Data.Profunctor (Profunctor)
-import qualified Data.Profunctor
+
 import Pipes
-import Pipes.Group (concats, intercalates, FreeT(..), FreeF(..))
+import Pipes.Group (folds, maps, concats, intercalates, FreeT(..), FreeF(..))
 import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
@@ -149,30 +142,30 @@ import Prelude hiding (
     writeFile )
 
 {- $intro
-    This package provides @pipes@ utilities for /text streams/ or /character streams/, 
-    realized as streams of 'Text' chunks. The individual chunks are uniformly /strict/, 
-    and thus you will generally want @Data.Text@ in scope.  But the type 
-    @Producer Text m r@ ,as we are using it, is a sort of /pipes/ equivalent of the lazy @Text@ type. 
-    
-    This particular module provides many functions equivalent in one way or another to 
-    the pure functions in 
-    <https://hackage.haskell.org/package/text-1.1.0.0/docs/Data-Text-Lazy.html Data.Text.Lazy>. 
-    They transform, divide, group and fold text streams. Though @Producer Text m r@ 
-    is the type of \'effectful Text\', the functions in this module are \'pure\' 
-    in the sense that they are uniformly monad-independent.
-    Simple /IO/ operations are defined in @Pipes.Text.IO@ -- as lazy IO @Text@ 
-    operations are in @Data.Text.Lazy.IO@. Inter-operation with @ByteString@ 
-    is provided in @Pipes.Text.Encoding@, which parallels @Data.Text.Lazy.Encoding@. 
+    This package provides @pipes@ utilities for /text streams/ or /character streams/,
+    realized as streams of 'Text' chunks. The individual chunks are uniformly /strict/,
+    and thus you will generally want @Data.Text@ in scope.  But the type
+    @Producer Text m r@ ,as we are using it, is a sort of /pipes/ equivalent of the lazy @Text@ type.
 
-    The Text type exported by @Data.Text.Lazy@ is basically that of a lazy list of 
-    strict Text: the implementation is arranged so that the individual strict 'Text' 
-    chunks are kept to a reasonable size; the user is not aware of the divisions 
-    between the connected 'Text' chunks. 
+    This particular module provides many functions equivalent in one way or another to
+    the pure functions in
+    <https://hackage.haskell.org/package/text-1.1.0.0/docs/Data-Text-Lazy.html Data.Text.Lazy>.
+    They transform, divide, group and fold text streams. Though @Producer Text m r@
+    is the type of \'effectful Text\', the functions in this module are \'pure\'
+    in the sense that they are uniformly monad-independent.
+    Simple /IO/ operations are defined in @Pipes.Text.IO@ -- as lazy IO @Text@
+    operations are in @Data.Text.Lazy.IO@. Inter-operation with @ByteString@
+    is provided in @Pipes.Text.Encoding@, which parallels @Data.Text.Lazy.Encoding@.
+
+    The Text type exported by @Data.Text.Lazy@ is basically that of a lazy list of
+    strict Text: the implementation is arranged so that the individual strict 'Text'
+    chunks are kept to a reasonable size; the user is not aware of the divisions
+    between the connected 'Text' chunks.
     So also here: the functions in this module are designed to operate on streams that
     are insensitive to text boundaries. This means that they may freely split
-    text into smaller texts and /discard empty texts/.  The objective, though, is 
-    that they should /never concatenate texts/ in order to provide strict upper 
-    bounds on memory usage.  
+    text into smaller texts and /discard empty texts/.  The objective, though, is
+    that they should /never concatenate texts/ in order to provide strict upper
+    bounds on memory usage.
 
     For example, to stream only the first three lines of 'stdin' to 'stdout' you
     might write:
@@ -181,10 +174,10 @@ import Prelude hiding (
 > import qualified Pipes.Text as Text
 > import qualified Pipes.Text.IO as Text
 > import Pipes.Group (takes')
-> import Lens.Family 
-> 
+> import Lens.Family
+>
 > main = runEffect $ takeLines 3 Text.stdin >-> Text.stdout
->   where 
+>   where
 >     takeLines n = Text.unlines . takes' n . view Text.lines
 
     The above program will never bring more than one chunk of text (~ 32 KB) into
@@ -192,49 +185,49 @@ import Prelude hiding (
 
 -}
 {- $lenses
-    As this example shows, one superficial difference from @Data.Text.Lazy@ 
-    is that many of the operations, like 'lines', are \'lensified\'; this has a 
-    number of advantages (where it is possible); in particular it facilitates their 
-    use with 'Parser's of Text (in the general <http://hackage.haskell.org/package/pipes-parse-3.0.1/docs/Pipes-Parse-Tutorial.html pipes-parse> 
+    As this example shows, one superficial difference from @Data.Text.Lazy@
+    is that many of the operations, like 'lines', are \'lensified\'; this has a
+    number of advantages (where it is possible); in particular it facilitates their
+    use with 'Parser's of Text (in the general <http://hackage.haskell.org/package/pipes-parse-3.0.1/docs/Pipes-Parse-Tutorial.html pipes-parse>
     sense.) The disadvantage, famously, is that the messages you get for type errors can be
     a little alarming. The remarks that follow in this section are for non-lens adepts.
 
-    Each lens exported here, e.g. 'lines', 'chunksOf' or 'splitAt', reduces to the 
+    Each lens exported here, e.g. 'lines', 'chunksOf' or 'splitAt', reduces to the
     intuitively corresponding function when used with @view@ or @(^.)@. Instead of
     writing:
-    
+
     > splitAt 17 producer
-    
-    as we would with the Prelude or Text functions, we write 
-    
+
+    as we would with the Prelude or Text functions, we write
+
     > view (splitAt 17) producer
-    
+
     or equivalently
-    
+
     > producer ^. splitAt 17
 
-    This may seem a little indirect, but note that many equivalents of 
-    @Text -> Text@ functions are exported here as 'Pipe's. Here too we recover the intuitively 
+    This may seem a little indirect, but note that many equivalents of
+    @Text -> Text@ functions are exported here as 'Pipe's. Here too we recover the intuitively
     corresponding functions by prefixing them with @(>->)@. Thus something like
 
->  stripLines = Text.unlines . Group.maps (>-> Text.stripStart) . view Text.lines 
+>  stripLines = Text.unlines . Group.maps (>-> Text.stripStart) . view Text.lines
 
-    would drop the leading white space from each line. 
+    would drop the leading white space from each line.
 
-    The lenses in this library are marked as /improper/; this just means that 
-    they don't admit all the operations of an ideal lens, but only /getting/ and /focusing/. 
-    Just for this reason, though, the magnificent complexities of the lens libraries 
-    are a distraction. The lens combinators to keep in mind, the ones that make sense for 
-    our lenses, are @view@ \/ @(^.)@), @over@ \/ @(%~)@ , and @zoom@. 
+    The lenses in this library are marked as /improper/; this just means that
+    they don't admit all the operations of an ideal lens, but only /getting/ and /focusing/.
+    Just for this reason, though, the magnificent complexities of the lens libraries
+    are a distraction. The lens combinators to keep in mind, the ones that make sense for
+    our lenses, are @view@ \/ @(^.)@), @over@ \/ @(%~)@ , and @zoom@.
 
     One need only keep in mind that if @l@ is a @Lens' a b@, then:
 
 -}
 {- $view
-    @view l@ is a function @a -> b@ . Thus @view l a@ (also written @a ^. l@ ) 
-    is the corresponding @b@; as was said above, this function will be exactly the 
-    function you think it is, given its name. Thus to uppercase the first n characters 
-    of a Producer, leaving the rest the same, we could write: 
+    @view l@ is a function @a -> b@ . Thus @view l a@ (also written @a ^. l@ )
+    is the corresponding @b@; as was said above, this function will be exactly the
+    function you think it is, given its name. Thus to uppercase the first n characters
+    of a Producer, leaving the rest the same, we could write:
 
 
     > upper n p = do p' <- p ^. Text.splitAt n >-> Text.toUpper
@@ -242,11 +235,11 @@ import Prelude hiding (
 -}
 {- $over
     @over l@ is a function @(b -> b) -> a -> a@.  Thus, given a function that modifies
-    @b@s, the lens lets us modify an @a@ by applying @f :: b -> b@ to 
-    the @b@ that we can \"see\" through the lens. So  @over l f :: a -> a@ 
-    (it can also be written @l %~ f@). 
-    For any particular @a@, then, @over l f a@ or @(l %~ f) a@ is a revised @a@. 
-    So above we might have written things like these: 
+    @b@s, the lens lets us modify an @a@ by applying @f :: b -> b@ to
+    the @b@ that we can \"see\" through the lens. So  @over l f :: a -> a@
+    (it can also be written @l %~ f@).
+    For any particular @a@, then, @over l f a@ or @(l %~ f) a@ is a revised @a@.
+    So above we might have written things like these:
 
     > stripLines = Text.lines %~ maps (>-> Text.stripStart)
     > stripLines = over Text.lines (maps (>-> Text.stripStart))
@@ -254,23 +247,23 @@ import Prelude hiding (
 
 -}
 {- $zoom
-    @zoom l@, finally, is a function from a @Parser b m r@  
-    to a @Parser a m r@ (or more generally a @StateT (Producer b m x) m r@).  
+    @zoom l@, finally, is a function from a @Parser b m r@
+    to a @Parser a m r@ (or more generally a @StateT (Producer b m x) m r@).
     Its use is easiest to see with an decoding lens like 'utf8', which
     \"sees\" a Text producer hidden inside a ByteString producer:
-    @drawChar@ is a Text parser, returning a @Maybe Char@, @zoom utf8 drawChar@ is 
-    a /ByteString/ parser, returning a @Maybe Char@. @drawAll@ is a Parser that returns 
-    a list of everything produced from a Producer, leaving only the return value; it would 
+    @drawChar@ is a Text parser, returning a @Maybe Char@, @zoom utf8 drawChar@ is
+    a /ByteString/ parser, returning a @Maybe Char@. @drawAll@ is a Parser that returns
+    a list of everything produced from a Producer, leaving only the return value; it would
     usually be unreasonable to use it. But @zoom (splitAt 17) drawAll@
     returns a list of Text chunks containing the first seventeen Chars, and returns the rest of
-    the Text Producer for further parsing. Suppose that we want, inexplicably, to 
-    modify the casing of a Text Producer according to any instruction it might 
+    the Text Producer for further parsing. Suppose that we want, inexplicably, to
+    modify the casing of a Text Producer according to any instruction it might
     contain at the start. Then we might write something like this:
 
 >     obey :: Monad m => Producer Text m b -> Producer Text m b
 >     obey p = do (ts, p') <- lift $ runStateT (zoom (Text.splitAt 7) drawAll) p
 >                 let seven = T.concat ts
->                 case T.toUpper seven of 
+>                 case T.toUpper seven of
 >                    "TOUPPER" -> p' >-> Text.toUpper
 >                    "TOLOWER" -> p' >-> Text.toLower
 >                    _         -> do yield seven
@@ -281,31 +274,31 @@ import Prelude hiding (
 > >>> runEffect $ obey doc >-> Text.stdout
 > THIS DOCUMENT.
 
-    The purpose of exporting lenses is the mental economy achieved with this three-way 
-    applicability. That one expression, e.g. @lines@ or @splitAt 17@ can have these 
-    three uses is no more surprising than that a pipe can act as a function modifying 
+    The purpose of exporting lenses is the mental economy achieved with this three-way
+    applicability. That one expression, e.g. @lines@ or @splitAt 17@ can have these
+    three uses is no more surprising than that a pipe can act as a function modifying
     the output of a producer, namely by using @>->@ to its left: @producer >-> pipe@
-    -- but can /also/ modify the inputs to a consumer by using @>->@ to its right: 
+    -- but can /also/ modify the inputs to a consumer by using @>->@ to its right:
     @pipe >-> consumer@
 
-    The three functions, @view@ \/ @(^.)@, @over@ \/ @(%~)@ and @zoom@ are supplied by 
-    both <http://hackage.haskell.org/package/lens lens> and 
+    The three functions, @view@ \/ @(^.)@, @over@ \/ @(%~)@ and @zoom@ are supplied by
+    both <http://hackage.haskell.org/package/lens lens> and
     <http://hackage.haskell.org/package/lens-family lens-family> The use of 'zoom' is explained
-    in <http://hackage.haskell.org/package/pipes-parse-3.0.1/docs/Pipes-Parse-Tutorial.html Pipes.Parse.Tutorial> 
-    and to some extent in the @Pipes.Text.Encoding@ module here. 
+    in <http://hackage.haskell.org/package/pipes-parse-3.0.1/docs/Pipes-Parse-Tutorial.html Pipes.Parse.Tutorial>
+    and to some extent in the @Pipes.Text.Encoding@ module here.
 
 -}
 {- $special
-    These simple 'lines' examples reveal a more important difference from @Data.Text.Lazy@ . 
-    This is in the types that are most closely associated with our central text type, 
+    These simple 'lines' examples reveal a more important difference from @Data.Text.Lazy@ .
+    This is in the types that are most closely associated with our central text type,
     @Producer Text m r@.  In @Data.Text@ and @Data.Text.Lazy@ we find functions like
 
 >   splitAt  :: Int -> Text -> (Text, Text)
 >   lines    ::        Text -> [Text]
 >   chunksOf :: Int -> Text -> [Text]
 
-    which relate a Text with a pair of Texts or a list of Texts. 
-    The corresponding functions here (taking account of \'lensification\') are 
+    which relate a Text with a pair of Texts or a list of Texts.
+    The corresponding functions here (taking account of \'lensification\') are
 
 >   view . splitAt  :: (Monad m, Integral n) => n -> Producer Text m r -> Producer Text m (Producer Text m r)
 >   view lines      :: Monad m               =>      Producer Text m r -> FreeT (Producer Text m) m r
@@ -325,12 +318,12 @@ import Prelude hiding (
 
     which brings one closer to the types of the similar functions in @Data.Text.Lazy@
 
-    In the type @Producer Text m (Producer Text m r)@ the second 
-    element of the \'pair\' of effectful Texts cannot simply be retrieved 
-    with something like 'snd'. This is an \'effectful\' pair, and one must work 
+    In the type @Producer Text m (Producer Text m r)@ the second
+    element of the \'pair\' of effectful Texts cannot simply be retrieved
+    with something like 'snd'. This is an \'effectful\' pair, and one must work
     through the effects of the first element to arrive at the second Text stream, even
-    if you are proposing to throw the Text in the first element away. 
-    Note that we use Control.Monad.join to fuse the pair back together, since it specializes to 
+    if you are proposing to throw the Text in the first element away.
+    Note that we use Control.Monad.join to fuse the pair back together, since it specializes to
 
 >    join :: Monad m => Producer Text m (Producer m r) -> Producer m r
 
@@ -346,12 +339,12 @@ import Prelude hiding (
 > (Text, (Text, (Text, (Text, r))))
 > ...
 
-    (We might also have identified the sum of those types with @Free ((,) Text) r@ 
-    -- or, more absurdly, @FreeT ((,) Text) Identity r@.) 
-    
-    Similarly, our type @Texts m r@, or @FreeT (Text m) m r@ -- in fact called 
+    (We might also have identified the sum of those types with @Free ((,) Text) r@
+    -- or, more absurdly, @FreeT ((,) Text) Identity r@.)
+
+    Similarly, our type @Texts m r@, or @FreeT (Text m) m r@ -- in fact called
     @FreeT (Producer Text m) m r@ here -- encompasses all the members of the sequence:
-   
+
 > m r
 > Text m r
 > Text m (Text m r)
@@ -361,43 +354,43 @@ import Prelude hiding (
 
     We might have used a more specialized type in place of @FreeT (Producer a m) m r@,
     or indeed of @FreeT (Producer Text m) m r@, but it is clear that the correct
-    result type of 'lines' will be isomorphic to @FreeT (Producer Text m) m r@ . 
+    result type of 'lines' will be isomorphic to @FreeT (Producer Text m) m r@ .
 
-    One might think that 
+    One might think that
 
 >   lines :: Monad m => Lens' (Producer Text m r) (FreeT (Producer Text m) m r)
 >   view . lines :: Monad m => Producer Text m r -> FreeT (Producer Text m) m r
 
     should really have the type
-    
+
 >   lines :: Monad m => Pipe Text Text m r
 
-    as e.g. 'toUpper' does. But this would spoil the control we are 
-    attempting to maintain over the size of chunks. It is in fact just 
+    as e.g. 'toUpper' does. But this would spoil the control we are
+    attempting to maintain over the size of chunks. It is in fact just
     as unreasonable to want such a pipe as to want
 
-> Data.Text.Lazy.lines :: Text -> Text 
+> Data.Text.Lazy.lines :: Text -> Text
 
-    to 'rechunk' the strict Text chunks inside the lazy Text to respect 
-    line boundaries. In fact we have 
+    to 'rechunk' the strict Text chunks inside the lazy Text to respect
+    line boundaries. In fact we have
 
 > Data.Text.Lazy.lines :: Text -> [Text]
 > Prelude.lines :: String -> [String]
 
     where the elements of the list are themselves lazy Texts or Strings; the use
-    of @FreeT (Producer Text m) m r@ is simply the 'effectful' version of this. 
-    
+    of @FreeT (Producer Text m) m r@ is simply the 'effectful' version of this.
+
     The @Pipes.Group@ module, which can generally be imported without qualification,
     provides many functions for working with things of type @FreeT (Producer a m) m r@.
     In particular it conveniently exports the constructors for @FreeT@ and the associated
-    @FreeF@ type -- a fancy form of @Either@, namely 
-    
+    @FreeF@ type -- a fancy form of @Either@, namely
+
 > data FreeF f a b = Pure a | Free (f b)
 
-    for pattern-matching. Consider the implementation of the 'words' function, or 
-    of the part of the lens that takes us to the words; it is compact but exhibits many 
+    for pattern-matching. Consider the implementation of the 'words' function, or
+    of the part of the lens that takes us to the words; it is compact but exhibits many
     of the points under discussion, including explicit handling of the @FreeT@ and @FreeF@
-    constuctors.  Keep in mind that 
+    constuctors.  Keep in mind that
 
 >  newtype FreeT f m a  = FreeT (m (FreeF f a (FreeT f m a)))
 >  next :: Monad m => Producer a m r -> m (Either r (a, Producer a m r))
@@ -414,12 +407,12 @@ import Prelude hiding (
 >         p'' <- view (break isSpace)    -- When we apply 'break isSpace', we get a Producer that returns a Producer;
 >                     (yield txt >> p')  --   so here we yield everything up to the next space, and get the rest back.
 >         return (words p'')             -- We then carry on with the rest, which is likely to begin with space.
-  
+
 -}
 
 -- | Convert a lazy 'TL.Text' into a 'Producer' of strict 'Text's
 fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
-fromLazy  = TL.foldrChunks (\e a -> yield e >> a) (return ()) 
+fromLazy  = TL.foldrChunks (\e a -> yield e >> a) (return ())
 {-# INLINE fromLazy #-}
 
 (^.) :: a -> ((b -> Constant b b) -> (a -> Constant b a)) -> b
@@ -436,44 +429,7 @@ concatMap
 concatMap f = P.map (T.concatMap f)
 {-# INLINABLE concatMap #-}
 
--- | Transform a Pipe of 'String's into one of 'Text' chunks
-pack :: Monad m => Pipe String Text m r
-pack = P.map T.pack
-{-# INLINEABLE pack #-}
-
--- | Transform a Pipes of 'Text' chunks into one of 'String's
-unpack :: Monad m => Pipe Text String m r
-unpack = for cat (\t -> yield (T.unpack t))
-{-# INLINEABLE unpack #-}
-
--- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utilities, 
--- here acting as 'Text' pipes, rather as they would  on a lazy text
-toCaseFold :: Monad m => Pipe Text Text m r
-toCaseFold = P.map T.toCaseFold
-{-# INLINEABLE toCaseFold #-}
-
--- | lowercase incoming 'Text'
-toLower :: Monad m => Pipe Text Text m r
-toLower = P.map T.toLower
-{-# INLINEABLE toLower #-}
-
--- | uppercase incoming 'Text'
-toUpper :: Monad m => Pipe Text Text m r
-toUpper = P.map T.toUpper
-{-# INLINEABLE toUpper #-}
-
--- | Remove leading white space from an incoming succession of 'Text's 
-stripStart :: Monad m => Pipe Text Text m r
-stripStart = do
-    chunk <- await
-    let text = T.stripStart chunk
-    if T.null text
-      then stripStart
-      else do yield text 
-              cat
-{-# INLINEABLE stripStart #-}
-
--- | @(take n)@ only allows @n@ individual characters to pass; 
+-- | @(take n)@ only allows @n@ individual characters to pass;
 --  contrast @Pipes.Prelude.take@ which would let @n@ chunks pass.
 take :: (Monad m, Integral a) => a -> Pipe Text Text m ()
 take n0 = go n0 where
@@ -489,21 +445,6 @@ take n0 = go n0 where
                     go (n - len)
 {-# INLINABLE take #-}
 
--- | @(drop n)@ drops the first @n@ characters
-drop :: (Monad m, Integral a) => a -> Pipe Text Text m r
-drop n0 = go n0 where
-    go n
-        | n <= 0    = cat
-        | otherwise = do
-            txt <- await
-            let len = fromIntegral (T.length txt)
-            if (len >= n)
-                then do
-                    yield (T.drop (fromIntegral n) txt)
-                    cat
-                else go (n - len)
-{-# INLINABLE drop #-}
-
 -- | Take characters until they fail the predicate
 takeWhile :: (Monad m) => (Char -> Bool) -> Pipe Text Text m ()
 takeWhile predicate = go
@@ -517,18 +458,6 @@ takeWhile predicate = go
                 go
             else yield prefix
 {-# INLINABLE takeWhile #-}
-
--- | Drop characters until they fail the predicate
-dropWhile :: (Monad m) => (Char -> Bool) -> Pipe Text Text m r
-dropWhile predicate = go where
-    go = do
-        txt <- await
-        case T.findIndex (not . predicate) txt of
-            Nothing -> go
-            Just i -> do
-                yield (T.drop i txt)
-                cat
-{-# INLINABLE dropWhile #-}
 
 -- | Only allows 'Char's to pass if they satisfy the predicate
 filter :: (Monad m) => (Char -> Bool) -> Pipe Text Text m r
@@ -550,6 +479,33 @@ scan step begin = do
         yield (T.tail txt')
         go c'
 {-# INLINABLE scan #-}
+
+-- | @toCaseFold@, @toLower@, @toUpper@ and @stripStart@ are standard 'Text' utilities,
+-- here acting as 'Text' pipes, rather as they would  on a lazy text
+toCaseFold :: Monad m => Pipe Text Text m r
+toCaseFold = P.map T.toCaseFold
+{-# INLINEABLE toCaseFold #-}
+
+-- | lowercase incoming 'Text'
+toLower :: Monad m => Pipe Text Text m r
+toLower = P.map T.toLower
+{-# INLINEABLE toLower #-}
+
+-- | uppercase incoming 'Text'
+toUpper :: Monad m => Pipe Text Text m r
+toUpper = P.map T.toUpper
+{-# INLINEABLE toUpper #-}
+
+-- | Remove leading white space from an incoming succession of 'Text's
+stripStart :: Monad m => Pipe Text Text m r
+stripStart = do
+    chunk <- await
+    let text = T.stripStart chunk
+    if T.null text
+      then stripStart
+      else do yield text
+              cat
+{-# INLINEABLE stripStart #-}
 
 {-| Fold a pure 'Producer' of strict 'Text's into a lazy
     'TL.Text'
@@ -575,6 +531,7 @@ foldChars
     => (x -> Char -> x) -> x -> (x -> r) -> Producer Text m () -> m r
 foldChars step begin done = P.fold (T.foldl' step) begin done
 {-# INLINABLE foldChars #-}
+
 
 -- | Retrieve the first 'Char'
 head :: (Monad m) => Producer Text m () -> m (Maybe Char)
@@ -656,18 +613,13 @@ find predicate p = head (p >-> filter predicate)
 index
     :: (Monad m, Integral a)
     => a-> Producer Text m () -> m (Maybe Char)
-index n p = head (p >-> drop n)
+index n p = head (drop n p)
 {-# INLINABLE index #-}
 
 
--- | Store a tally of how many segments match the given 'Text'
-count :: (Monad m, Num n) => Text -> Producer Text m () -> m n
-count c p = P.fold (+) 0 id (p >-> P.map (fromIntegral . T.count c))
-{-# INLINABLE count #-}
-
 
 -- | Consume the first character from a stream of 'Text'
--- 
+--
 -- 'next' either fails with a 'Left' if the 'Producer' has no more characters or
 -- succeeds with a 'Right' providing the next character and the remainder of the
 -- 'Producer'.
@@ -742,7 +694,6 @@ isEndOfChars = do
         Nothing -> True
         Just _-> False )
 {-# INLINABLE isEndOfChars #-}
-
 
 -- | Splits a 'Producer' after the given number of characters
 splitAt
@@ -822,11 +773,11 @@ groupBy equals k p0 = fmap join (k ((go p0))) where
             Left   r       -> return (return r)
             Right (txt, p') -> case T.uncons txt of
                 Nothing      -> go p'
-                Just (c, _) -> (yield txt >> p') ^. span (equals c) 
+                Just (c, _) -> (yield txt >> p') ^. span (equals c)
 {-# INLINABLE groupBy #-}
 
 -- | Improper lens that splits after the first succession of identical 'Char' s
-group :: Monad m 
+group :: Monad m
       => Lens' (Producer Text m r)
                (Producer Text m (Producer Text m r))
 group = groupBy (==)
@@ -834,9 +785,9 @@ group = groupBy (==)
 
 {-| Improper lens that splits a 'Producer' after the first word
 
-    Unlike 'words', this does not drop leading whitespace 
+    Unlike 'words', this does not drop leading whitespace
 -}
-word :: (Monad m) 
+word :: (Monad m)
      => Lens' (Producer Text m r)
               (Producer Text m (Producer Text m r))
 word k p0 = fmap join (k (to p0))
@@ -846,14 +797,27 @@ word k p0 = fmap join (k (to p0))
         p'^.break isSpace
 {-# INLINABLE word #-}
 
-
-line :: (Monad m) 
+line :: (Monad m)
      => Lens' (Producer Text m r)
               (Producer Text m (Producer Text m r))
 line = break (== '\n')
-
 {-# INLINABLE line #-}
 
+-- | @(drop n)@ drops the first @n@ characters
+drop :: (Monad m, Integral n)
+     => n -> Producer Text m r -> Producer Text m r
+drop n p = do
+    p' <- lift $ runEffect (for (p ^. splitAt n) discard)
+    p'
+{-# INLINABLE drop #-}
+
+-- | Drop characters until they fail the predicate
+dropWhile :: (Monad m)
+    => (Char -> Bool) -> Producer Text m r -> Producer Text m r
+dropWhile predicate p = do
+    p' <- lift $ runEffect (for (p ^. span predicate) discard)
+    p'
+{-# INLINABLE dropWhile #-}
 
 -- | Intersperse a 'Char' in between the characters of stream of 'Text'
 intersperse
@@ -878,28 +842,36 @@ intersperse c = go0
 {-# INLINABLE intersperse #-}
 
 
--- | Improper isomorphism between a 'Producer' of 'ByteString's and 'Word8's
-packChars :: Monad m => Iso'_ (Producer Char m x) (Producer Text m x)
-packChars = Data.Profunctor.dimap to (fmap from)
-  where
-    -- to :: Monad m => Producer Char m x -> Producer Text m x
-    to p = PG.folds step id done (p^.PG.chunksOf defaultChunkSize)
+-- | Improper lens from unpacked 'Word8's to packaged 'ByteString's
+pack :: Monad m => Lens' (Producer Char m r) (Producer Text m r)
+pack k p = fmap _unpack (k (_pack p))
+{-# INLINABLE pack #-}
 
-    step diffAs c = diffAs . (c:)
+-- | Improper lens from packed 'ByteString's to unpacked 'Word8's
+unpack :: Monad m => Lens' (Producer Text m r) (Producer Char m r)
+unpack k p = fmap _pack (k (_unpack p))
+{-# INLINABLE unpack #-}
+
+_pack :: Monad m => Producer Char m r -> Producer Text m r
+_pack p = folds step id done (p^.PG.chunksOf defaultChunkSize)
+  where
+    step diffAs w8 = diffAs . (w8:)
 
     done diffAs = T.pack (diffAs [])
+{-# INLINABLE _pack #-}
 
-    -- from :: Monad m => Producer Text m x -> Producer Char m x
-    from p = for p (each . T.unpack)
-{-# INLINABLE packChars #-}
+_unpack :: Monad m => Producer Text m r -> Producer Char m r
+_unpack p = for p (each . T.unpack)
+{-# INLINABLE _unpack #-}
 
 defaultChunkSize :: Int
 defaultChunkSize = 16384 - (sizeOf (undefined :: Int) `shiftL` 1)
 
+
 -- | Split a text stream into 'FreeT'-delimited text streams of fixed size
 chunksOf
     :: (Monad m, Integral n)
-    => n -> Lens' (Producer Text m r) 
+    => n -> Lens' (Producer Text m r)
                   (FreeT (Producer Text m) m r)
 chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
   where
@@ -908,7 +880,7 @@ chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
         return $ case x of
             Left   r       -> Pure r
             Right (txt, p') -> Free $ do
-                p'' <- (yield txt >> p') ^. splitAt n 
+                p'' <- (yield txt >> p') ^. splitAt n
                 return $ FreeT (go p'')
 {-# INLINABLE chunksOf #-}
 
@@ -919,8 +891,7 @@ chunksOf n k p0 = fmap concats (k (FreeT (go p0)))
 splitsWith
     :: (Monad m)
     => (Char -> Bool)
-    -> Producer Text m r
-    -> FreeT (Producer Text m) m r
+    -> Producer Text m r -> FreeT (Producer Text m) m r
 splitsWith predicate p0 = FreeT (go0 p0)
   where
     go0 p = do
@@ -938,7 +909,7 @@ splitsWith predicate p0 = FreeT (go0 p0)
         return $ case x of
             Left   r      -> Pure r
             Right (_, p') -> Free $ do
-                    p'' <- p' ^. span (not . predicate) 
+                    p'' <- p' ^. span (not . predicate)
                     return $ FreeT (go1 p'')
 {-# INLINABLE splitsWith #-}
 
@@ -948,7 +919,7 @@ splits :: (Monad m)
       -> Lens' (Producer Text m r)
                (FreeT (Producer Text m) m r)
 splits c k p =
-          fmap (PG.intercalates (yield (T.singleton c))) (k (splitsWith (c ==) p))
+          fmap (intercalates (yield (T.singleton c))) (k (splitsWith (c ==) p))
 {-# INLINABLE splits #-}
 
 {-| Isomorphism between a stream of 'Text' and groups of equivalent 'Char's , using the
@@ -958,7 +929,7 @@ groupsBy
     :: Monad m
     => (Char -> Char -> Bool)
     -> Lens' (Producer Text m x) (FreeT (Producer Text m) m x)
-groupsBy equals k p0 = fmap concats (k (FreeT (go p0))) where 
+groupsBy equals k p0 = fmap concats (k (FreeT (go p0))) where
   go p = do x <- next p
             case x of Left   r       -> return (Pure r)
                       Right (bs, p') -> case T.uncons bs of
@@ -981,10 +952,19 @@ groups = groupsBy (==)
 {-| Split a text stream into 'FreeT'-delimited lines
 -}
 lines
-    :: (Monad m) => Iso'_ (Producer Text m r)  (FreeT (Producer Text m) m r)
-lines = Data.Profunctor.dimap _lines (fmap _unlines)
-  where
-  _lines p0 = FreeT (go0 p0) 
+    :: (Monad m) => Lens' (Producer Text m r)  (FreeT (Producer Text m) m r)
+lines k p = fmap _unlines (k (_lines p))
+{-# INLINABLE lines #-}
+
+unlines
+    :: Monad m
+    => Lens' (FreeT (Producer Text m) m r) (Producer Text m r)
+unlines k p = fmap _lines (k (_unlines p))
+{-# INLINABLE unlines #-}
+
+_lines :: Monad m
+             => Producer Text m r -> FreeT (Producer Text m) m r
+_lines p0 = FreeT (go0 p0)
     where
       go0 p = do
               x <- next p
@@ -1001,29 +981,40 @@ lines = Data.Profunctor.dimap _lines (fmap _unlines)
                   case x of
                       Left   r      -> return $ Pure r
                       Right (_, p'') -> go0 p''
-  -- _unlines
-  --     :: Monad m
-  --      => FreeT (Producer Text m) m x -> Producer Text m x
-  _unlines = concats . PG.maps (<* yield (T.singleton '\n'))
+{-# INLINABLE _lines #-}
 
-{-# INLINABLE lines #-}
+_unlines :: Monad m
+         => FreeT (Producer Text m) m r -> Producer Text m r
+_unlines = concats . maps (<* yield (T.singleton '\n'))
+{-# INLINABLE _unlines #-}
 
-
--- | Split a text stream into 'FreeT'-delimited words
+-- | Split a text stream into 'FreeT'-delimited words. Note that 
+-- roundtripping with e.g. @over words id@ eliminates extra space
+-- characters as with @Prelude.unwords . Prelude.words@
 words
-    :: (Monad m) => Iso'_ (Producer Text m r) (FreeT (Producer Text m) m r)
-words = Data.Profunctor.dimap go (fmap _unwords)
-  where
-    go p = FreeT $ do
-        x <- next (p >-> dropWhile isSpace)
+    :: (Monad m) => Lens' (Producer Text m r) (FreeT (Producer Text m) m r)
+words k p = fmap _unwords (k (_words p))
+{-# INLINABLE words #-}
+
+unwords
+    :: Monad m
+    => Lens' (FreeT (Producer Text m) m r) (Producer Text m r)
+unwords k p = fmap _words (k (_unwords p))
+{-# INLINABLE unwords #-}
+
+_words :: (Monad m) => Producer Text m r -> FreeT (Producer Text m) m r
+_words p = FreeT $ do
+        x <- next (dropWhile isSpace p)
         return $ case x of
             Left   r       -> Pure r
             Right (bs, p') -> Free $ do
                 p'' <-  (yield bs >> p') ^. break isSpace
-                return (go p'')
-    _unwords = PG.intercalates (yield $ T.singleton ' ')
-    
-{-# INLINABLE words #-}
+                return (_words p'')
+{-# INLINABLE _words #-}
+
+_unwords :: (Monad m) => FreeT (Producer Text m) m r -> Producer Text m r
+_unwords = intercalates (yield $ T.singleton ' ')
+{-# INLINABLE _unwords #-}
 
 
 {-| 'intercalate' concatenates the 'FreeT'-delimited text streams after
@@ -1031,9 +1022,7 @@ words = Data.Profunctor.dimap go (fmap _unwords)
 -}
 intercalate
     :: (Monad m)
-    => Producer Text m ()
-    -> FreeT (Producer Text m) m r
-    -> Producer Text m r
+    => Producer Text m () -> FreeT (Producer Text m) m r -> Producer Text m r
 intercalate p0 = go0
   where
     go0 f = do
@@ -1053,35 +1042,13 @@ intercalate p0 = go0
                 go1 f'
 {-# INLINABLE intercalate #-}
 
-{-| Join 'FreeT'-delimited lines into a text stream
--}
-unlines
-    :: (Monad m) => FreeT (Producer Text m) m r -> Producer Text m r
-unlines = go
-  where
-    go f = do
-        x <- lift (runFreeT f)
-        case x of
-            Pure r -> return r
-            Free p -> do
-                f' <- p
-                yield $ T.singleton '\n'
-                go f'
-{-# INLINABLE unlines #-}
-
-{-| Join 'FreeT'-delimited words into a text stream
--}
-unwords
-    :: (Monad m) => FreeT (Producer Text m) m r -> Producer Text m r
-unwords = intercalate (yield $ T.singleton ' ')
-{-# INLINABLE unwords #-}
 
 
 {- $reexports
-    
+
     @Data.Text@ re-exports the 'Text' type.
 
-    @Pipes.Parse@ re-exports 'input', 'concat', 'FreeT' (the type) and the 'Parse' synonym. 
+    @Pipes.Parse@ re-exports 'input', 'concat', 'FreeT' (the type) and the 'Parse' synonym.
 -}
 
 
