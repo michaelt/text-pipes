@@ -1,5 +1,5 @@
 name:                pipes-text
-version:             0.0.0.14
+version:             0.0.0.15
 synopsis:            Text pipes.
 description:         * This package will be in a draft, or testing, phase until version 0.0.1. Please report any installation difficulties, or any wisdom about the api, on the github page or the <https://groups.google.com/forum/#!forum/haskell-pipes pipes list>
                      .
@@ -50,5 +50,5 @@ library
   ghc-options: -O2
 
   if !flag(noio)
-    exposed-modules:   Pipes.Text.IO
+    exposed-modules:   Pipes.Text.IO, Pipes.Text.Tutorial
     build-depends:     text >=0.11.3              && < 1.3
