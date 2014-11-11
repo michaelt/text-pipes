@@ -7,6 +7,8 @@ before_install:
   # Try installing some of the build-deps with apt-get for speed.
   - travis/cabal-apt-install 
 
+
 install:
-  - cabal configure 
-  - cabal build
+  - $CABAL install --dependencies-only 
+  - $CABAL configure 
+  - $CABAL build
