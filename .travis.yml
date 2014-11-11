@@ -8,7 +8,7 @@ before_install:
   - travis/cabal-apt-install $mode
 
 install:
-  - cabal configure $mode
+  - cabal configure 
   - cabal build
 
 notifications:
