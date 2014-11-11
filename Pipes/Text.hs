@@ -148,7 +148,7 @@ a ^. lens = getConstant (lens Constant a)
 -- | Apply a transformation to each 'Char' in the stream
 
 -- >>> let margaret =  ["Margaret, are you grieving\nOver Golde","ngrove unleaving?":: Text]
--- >>> TL.putStrLn $ toLazy $ each margaret >-> map Data.Char.toUpper
+-- >>> TL.putStrLn . toLazy $ each margaret >-> map Data.Char.toUpper
 -- MARGARET, ARE YOU GRIEVING
 -- OVER GOLDENGROVE UNLEAVING?
 map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
@@ -168,7 +168,7 @@ take :: (Monad m, Integral a) => a -> Pipe Text Text m ()
 take n0 = go n0 where
     go n
         | n <= 0    = return ()
-        | otherwise = do
+        | otherwise = do 
             txt <- await
             let len = fromIntegral (T.length txt)
             if (len > n)
