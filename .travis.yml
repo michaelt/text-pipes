@@ -1,2 +1,12 @@
 language: haskell
 
+before_install:
+  # Uncomment whenever hackage is down.
+  # - mkdir -p ~/.cabal && cp travis/config ~/.cabal/config && cabal update
+
+  # Try installing some of the build-deps with apt-get for speed.
+  - travis/cabal-apt-install 
+
+install:
+  - cabal configure 
+  - cabal build
