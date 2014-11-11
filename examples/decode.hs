@@ -3,14 +3,16 @@
 import Data.ByteString (ByteString)
 import Data.Text       (Text)
 import Lens.Family.State.Strict (zoom)
+
 import Pipes
 import Pipes.Parse
 import qualified Pipes.ByteString as ByteString
-import qualified Pipes.Text       as Text
+import qualified Pipes.Text as Text
+import qualified Pipes.Text.Encoding as Text
 
 -- Retrieve all `Text` chunks up to 10 characters
 parser :: Monad m => Parser ByteString m [Text]
-parser = zoom (Text.decodeUtf8 . Text.splitAt 10) drawAll
+parser = zoom (Text.utf8 . Text.splitAt 10) drawAll
 
 main = do
     (textChunks, leftovers) <- runStateT parser ByteString.stdin

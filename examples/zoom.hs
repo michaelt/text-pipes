@@ -26,15 +26,14 @@ import qualified Pipes.ByteString as Bytes
 import qualified Pipes.Text as Txt
 import Pipes.Text.Encoding (utf8)
 
-import Control.Lens
-import Control.Lens.Internal.Zoom
+import Control.Lens -- we use 'zoom' with MonadState, not just StateT
 import Control.Monad
 import qualified System.IO as IO
 import Control.Monad.Trans.Maybe
 import Control.Monad.State.Class
 
 main :: IO ()
-main = do -- S.writeFile fp $ contents 10000 -- 10000 cannot be handled fileParser0 and 1
+main = do S.writeFile fp $ contents 10000 -- 10000 cannot be handled fileParser0 and 1
           -- parse_file fileParser0  -- pathological
           -- parse_file fileParser1  -- programs
           parse_file fileParser2  -- good program 
@@ -76,22 +75,16 @@ fileParser1  = do nameLength    <- zoom utf8 parseNumber
                   contents      <- zoom (Bytes.splitAt contentLength) (lift drawAll)
                   return (File (T.concat names) (S.concat contents))
 
--- this is the good program; be reflecting on the fact that file names
+-- This is the good program; by reflecting on the fact that file names
 -- should not be a 1000 bytes long, and binary files longer than e.g. 10 ^ 10
 -- we can restrict the length of the byte stream to which we apply `zoom utf8`
-fileParser2  = do nameLength  <- Bytes.splitAt 3 ~~> utf8 ~~> parseNumber
-                  names       <- Bytes.splitAt nameLength ~~> utf8 ~~> lift drawAll
-                  len         <- Bytes.splitAt 10 ~~>  utf8 ~~> parseNumber
-                  contents    <- Bytes.splitAt len ~~> lift drawAll
+fileParser2  = do nameLength  <- zoom (Bytes.splitAt 3 . utf8) parseNumber
+                  names       <- zoom (Bytes.splitAt nameLength . utf8) (lift drawAll)
+                  len         <- zoom (Bytes.splitAt 10 . utf8) parseNumber
+                  contents    <- zoom (Bytes.splitAt len) (lift drawAll)
                   return (File (T.concat names) (S.concat contents))
 
--- infix lens nonsense
-infixr 1 ~~>
-(~~>) :: Zoom m n s t 
-      => ((s -> Zoomed n c s) -> t -> Zoomed n c t)
-      -> m c -> n c
-(~~>) = zoom
-{-# INLINE (~~>) #-}
+
 
 parseNumber :: Monad m =>  MaybeT (StateT (Producer Text m x) m) Int
 parseNumber  = loop  0 where
@@ -132,21 +125,3 @@ input =
     ]
 
 
----
-
--- This desperate scheme actually has some efficacy, if used before `utf8` in a zoom
--- but not much 
-
-chunk :: Monad m => Int -> Lens' (Producer ByteString m r) (Producer ByteString m r)
-chunk n = lens (chunkyN n) (\_ b -> b) where
-
-    chunkyN  :: Monad m => Int -> Producer ByteString m r -> Producer ByteString m r
-    chunkyN n  = prod_loop where
-
-      prod_loop p = do mbs <- lift $ next p
-                       case mbs of Left r -> return r
-                                   Right (bs, p') -> do bs_loop bs
-                                                        prod_loop p'
-      bs_loop bs = unless (S.null bs) $ do yield fore
-                                           unless (S.null aft)  (bs_loop aft)
-            where (fore, aft) = S.splitAt n bs
