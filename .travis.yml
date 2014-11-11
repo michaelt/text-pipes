@@ -9,6 +9,6 @@ before_install:
 
 
 install:
-  - $CABAL install --dependencies-only 
-  - $CABAL configure 
-  - $CABAL build
+  - cabal install --dependencies-only 
+  - cabal configure 
+  - cabal build
