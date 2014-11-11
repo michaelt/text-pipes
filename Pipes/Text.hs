@@ -128,8 +128,16 @@ import Prelude hiding (
     words,
     writeFile )
 
+-- $setup
+-- >>> :set -XOverloadedStrings
+-- >>> import Data.Text (Text)
+-- >>> import qualified Data.Text as T
+-- >>> import qualified Data.Text.Lazy.IO as TL
+-- >>> import Data.Char
 
--- | Convert a lazy 'TL.Text' into a 'Producer' of strict 'Text's
+-- | Convert a lazy 'TL.Text' into a 'Producer' of strict 'Text's. Producers in 
+-- IO can be found in 'Pipes.Text.IO' or in pipes-bytestring, employed with the
+-- decoding lenses in 'Pipes.Text.Encoding'
 fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
 fromLazy  = TL.foldrChunks (\e a -> yield e >> a) (return ())
 {-# INLINE fromLazy #-}
@@ -138,11 +146,17 @@ fromLazy  = TL.foldrChunks (\e a -> yield e >> a) (return ())
 a ^. lens = getConstant (lens Constant a)
 
 -- | Apply a transformation to each 'Char' in the stream
+
+-- >>> let margaret =  ["Margaret, are you grieving\nOver Golde","ngrove unleaving?":: Text]
+-- >>> TL.putStrLn $ toLazy $ each margaret >-> map Data.Char.toUpper
+-- MARGARET, ARE YOU GRIEVING
+-- OVER GOLDENGROVE UNLEAVING?
 map :: (Monad m) => (Char -> Char) -> Pipe Text Text m r
 map f = P.map (T.map f)
 {-# INLINABLE map #-}
 
 -- | Map a function over the characters of a text stream and concatenate the results
+
 concatMap
     :: (Monad m) => (Char -> Text) -> Pipe Text Text m r
 concatMap f = P.map (T.concatMap f)
@@ -184,6 +198,11 @@ filter predicate = P.map (T.filter predicate)
 {-# INLINABLE filter #-}
 
 -- | Strict left scan over the characters
+-- >>> let margaret = ["Margaret, are you grieving\nOver Golde","ngrove unleaving?":: Text]
+-- >>> let title_caser a x = case a of ' ' -> Data.Char.toUpper x; _ -> x
+-- >>> toLazy $ each margaret >-> scan title_caser ' ' 
+-- " Margaret, Are You Grieving\nOver Goldengrove Unleaving?"
+
 scan
     :: (Monad m)
     => (Char -> Char -> Char) -> Char -> Pipe Text Text m r
