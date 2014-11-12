@@ -24,12 +24,12 @@ module Pipes.Text.Tutorial (
     -- * Special types: @Producer Text m (Producer Text m r)@ and @FreeT (Producer Text m) m r@
     -- $special
     ) where
-      
+
 import Pipes
 import Pipes.Text
 import Pipes.Text.IO
 import Pipes.Text.Encoding
-      
+
 {- $intro
     This package provides @pipes@ utilities for /character streams/,
     realized as streams of 'Text' chunks. The individual chunks are uniformly /strict/,

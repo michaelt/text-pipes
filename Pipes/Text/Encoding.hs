@@ -12,6 +12,7 @@ module Pipes.Text.Encoding
     -- $lenses
     Codec
     , decode
+    , eof
     -- * \'Viewing\' the Text in a byte stream
     -- $codecs
     , utf8
@@ -88,8 +89,41 @@ type Codec
 
 -}
 
+
 decode :: ((b -> Constant b b) -> (a -> Constant b a)) -> a -> b
 decode codec a = getConstant (codec Constant a)
+
+{- | 'eof' tells you explicitly when decoding stops due to bad bytes or instead
+      reaches end-of-file happily. (Without it one just makes an explicit test 
+      for emptiness of the resulting bytestring production using 'next') 
+      Thus
+
+>     decode (utf8 . eof) p =  view (utf8 . eof) p = p^.utf8.eof
+ 
+      will be a text producer. If we hit undecodable bytes, the remaining
+      bytestring producer will be returned as a 'Left' value; 
+      in the happy case, a 'Right' value is returned with the anticipated 
+      return value for the original bytestring producer. 
+      ) 
+
+-}
+
+eof :: Monad m => Lens' (Producer Text m (Producer ByteString m r))
+                        (Producer Text m (Either (Producer ByteString m r) r))
+eof k p = fmap fromEither (k (toEither p)) where
+
+  fromEither = liftM (either id return)
+
+  toEither pp = do p <- pp
+                   check p
+
+  check p = do e <- lift (next p)
+               case e of 
+                 Left r -> return (Right r)
+                 Right (bs,pb) ->  if B.null bs 
+                                     then check pb
+                                     else return (Left (do yield bs
+                                                           pb))
 
 
 {- $codecs
@@ -185,6 +219,7 @@ decodeStream = loop where
                                                       return (do yield bs 
                                                                  p')
 {-# INLINABLE decodeStream#-}
+
 
 {- $decoders
    These are functions with the simple type:
