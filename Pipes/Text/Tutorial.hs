@@ -3,12 +3,19 @@
 module Pipes.Text.Tutorial (
     -- * Effectful Text
     -- $intro
+    
     -- ** @Pipes.Text@
     -- $pipestext
+    
     -- ** @Pipes.Text.IO@
     -- $pipestextio
+    
     -- ** @Pipes.Text.Encoding@
     -- $pipestextencoding
+    
+    -- ** Implicit chunking
+    -- $chunks
+    
     -- * Lenses
     -- $lenses
 
@@ -20,6 +27,9 @@ module Pipes.Text.Tutorial (
 
     -- ** @zoom@
     -- $zoom
+    
+
+
 
     -- * Special types: @Producer Text m (Producer Text m r)@ and @FreeT (Producer Text m) m r@
     -- $special
@@ -36,7 +46,9 @@ import Pipes.Text.Encoding
     and thus the @Text@ type we are using is the one from @Data.Text@, not @Data.Text.Lazy@ 
     But the type @Producer Text m r@, as we are using it, is a sort of /pipes/ equivalent of 
     the lazy @Text@ type.
+-}
 
+{- $pipestext
     The main @Pipes.Text@ module provides many functions equivalent 
     in one way or another to the pure functions in
     <https://hackage.haskell.org/package/text-1.1.0.0/docs/Data-Text-Lazy.html Data.Text.Lazy> 
@@ -44,17 +56,28 @@ import Pipes.Text.Encoding
     divide, group and fold text streams. Though @Producer Text m r@
     is the type of \'effectful Text\', the functions in @Pipes.Text@ are \'pure\'
     in the sense that they are uniformly monad-independent.
-    Simple /IO/ operations are defined in @Pipes.Text.IO@ - as lazy IO @Text@
-    operations are in @Data.Text.Lazy.IO@. Similarly, as @Data.Text.Lazy.Encoding@ 
-    handles inter-operation with @Data.ByteString.Lazy@, @Pipes.Text.Encoding@ provides for
-    interoperation with the \'effectful ByteStrings\' of @Pipes.ByteString@.
+-}
 
+{- $pipestextencoding 
+    In the @text@ library, @Data.Text.Lazy.Encoding@ 
+    handles inter-operation with @Data.ByteString.Lazy@. Here, @Pipes.Text.Encoding@ 
+    provides for interoperation with the \'effectful ByteStrings\' of @Pipes.ByteString@.
+-}
+
+{- $pipestextio
+    Simple /IO/ operations are defined in @Pipes.Text.IO@ - as lazy IO @Text@
+    operations are in @Data.Text.Lazy.IO@. It is generally 
+-} 
+
+
+{- $chunks
     Remember that the @Text@ type exported by @Data.Text.Lazy@ is basically 
     that of a lazy list of strict @Text@: the implementation is arranged so that 
     the individual strict 'Text' chunks are kept to a reasonable size; the user 
     is not aware of the divisions between the connected 'Text' chunks, but uses
     operations akin to those for strict text.
-    So also here: the functions in this module are designed to operate on character streams that
+    
+    So also here: the operations in @Pipes.Text@ are designed to operate on character streams that
     in a way that is independent of the boundaries of the underlying @Text@ chunks. 
     This means that they may freely split text into smaller texts and /discard empty texts/.  
     The objective, though, is that they should not /concatenate texts/ in order to provide strict upper
@@ -67,16 +90,20 @@ import Pipes.Text.Encoding
 > import qualified Pipes.Text as Text
 > import qualified Pipes.Text.IO as Text
 > import Pipes.Group (takes')
-> import Lens.Family (view)
+> import Lens.Family (view, (%~)) -- or, Control.Lens
 >
 > main = runEffect $ takeLines 3 Text.stdin >-> Text.stdout
->   where
+>   where 
 >     takeLines n = view Text.unlines . takes' n . view Text.lines
+> -- or equivalently: Text.unlines %~ takes' n
 
-     This program will never bring more into memory than what @Text.stdin@ considers
-     one chunk of text (~ 32 KB), even if individual lines are split across many chunks.
+     This program will not bring more into memory than what @Text.stdin@ considers
+     one chunk of text (~ 32 KB), even if individual lines are split 
+     across many chunks.  The division into lines does not join Text fragments.
 
 -}
+
+
 {- $lenses
     As the use of @view@ in this example shows, one superficial difference from @Data.Text.Lazy@
     is that many of the operations, like 'lines', are \'lensified\'; this has a
@@ -90,7 +117,7 @@ import Pipes.Text.Encoding
 
     > splitAt 17 producer
 
-    as we would with the Prelude or Text functions, we write
+    as we would with the Prelude or Text functions called @splitAt@, we write
 
     > view (splitAt 17) producer
 
@@ -110,7 +137,7 @@ import Pipes.Text.Encoding
     they don't admit all the operations of an ideal lens, but only /getting/ and /focusing/.
     Just for this reason, though, the magnificent complexities of the lens libraries
     are a distraction. The lens combinators to keep in mind, the ones that make sense for
-    our lenses, are @view@ \/ @(^.)@), @over@ \/ @(%~)@ , and @zoom@.
+    our lenses, are @view@, @over@, and @zoom@.
 
     One need only keep in mind that if @l@ is a @Lens' a b@, then:
 
@@ -120,7 +147,6 @@ import Pipes.Text.Encoding
     is the corresponding @b@; as was said above, this function will typically be 
     the pipes equivalent of the function you think it is, given its name. So for example 
     
-    > view (Text.drop)
     > view (Text.splitAt 300) :: Producer Text m r -> Producer Text (Producer Text m r)
     > Text.stdin ^. splitAt 300 :: Producer Text IO (Producer Text IO r) 
     
@@ -128,23 +154,29 @@ import Pipes.Text.Encoding
     Thus to uppercase the first n characters
     of a Producer, leaving the rest the same, we could write:
 
-
     > upper n p = do p' <- p ^. Text.splitAt n >-> Text.toUpper
     >                p'
+    
+    or equivalently:
+    
+    > upper n p = join (p ^. Text.splitAt n >-> Text.toUpper)
+    
 -}
 {- $over
-    @over l@ is a function @(b -> b) -> a -> a@.  Thus, given a function that modifies
+    If @l@ is a @Lens a b@, @over l@ is a function @(b -> b) -> a -> a@.  
+    Thus, given a function that modifies
     @b@s, the lens lets us modify an @a@ by applying @f :: b -> b@ to
-    the @b@ that we can \"see\" through the lens. So  @over l f :: a -> a@
+    the @b@ that we \"see\" in the @a@ through the lens. 
+    So the type of @over l f@ is @a -> a@ for the concrete type @a@
     (it can also be written @l %~ f@).
     For any particular @a@, then, @over l f a@ or @(l %~ f) a@ is a revised @a@.
     So above we might have written things like these:
 
-    > stripLines = Text.lines %~ maps (>-> Text.stripStart)
     > stripLines = over Text.lines (maps (>-> Text.stripStart))
+    > stripLines = Text.lines %~ maps (>-> Text.stripStart)
     > upper n    =  Text.splitAt n %~ (>-> Text.toUpper)
-
 -}
+
 {- $zoom
     @zoom l@, finally, is a function from a @Parser b m r@
     to a @Parser a m r@ (or more generally a @StateT (Producer b m x) m r@).
@@ -169,9 +201,9 @@ import Pipes.Text.Encoding
 >                                    p'
 
 
-> >>> let doc = each ["toU","pperTh","is document.\n"]
-> >>> runEffect $ obey doc >-> Text.stdout
-> THIS DOCUMENT.
+> -- > let doc = each ["toU","pperTh","is document.\n"]
+> -- > runEffect $ obey doc >-> Text.stdout
+> -- THIS DOCUMENT.
 
     The purpose of exporting lenses is the mental economy achieved with this three-way
     applicability. That one expression, e.g. @lines@ or @splitAt 17@ can have these
@@ -187,8 +219,9 @@ import Pipes.Text.Encoding
     and to some extent in the @Pipes.Text.Encoding@ module here.
 
 -}
+
 {- $special
-    These simple 'lines' examples reveal a more important difference from @Data.Text.Lazy@ .
+    The simple programs using the 'lines' lens reveal a more important difference from @Data.Text.Lazy@ .
     This is in the types that are most closely associated with our central text type,
     @Producer Text m r@.  In @Data.Text@ and @Data.Text.Lazy@ we find functions like
 

@@ -1,10 +1,9 @@
 {-# LANGUAGE RankNTypes, BangPatterns #-}
 
--- | This module uses the stream decoding functions from Michael Snoyman's new
+-- | This module uses the stream decoding functions from
 --  <http://hackage.haskell.org/package/text-stream-decode text-stream-decode> 
 --  package to define decoding functions and lenses.  The exported names
---  conflict with names in @Data.Text.Encoding@ but the module can otherwise be 
---  imported unqualified. 
+--  conflict with names in @Data.Text.Encoding@ but not with the @Prelude@ 
 
 module Pipes.Text.Encoding
     ( 
@@ -55,7 +54,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE 
 import qualified Data.Streaming.Text as Stream
 import Data.Streaming.Text (DecodeResult(..))
-import Control.Monad (join)
+import Control.Monad (join, liftM)
 import Data.Word (Word8)
 import Pipes
 
@@ -71,8 +70,7 @@ type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 
     is just an alias for a Prelude type. Thus you use any particular codec with
     the @view@ / @(^.)@ , @zoom@ and @over@ functions from either of those libraries;
-    we presuppose neither since we already have access to the types they require.
-
+    we presuppose neither library since we already have access to the types they require.
     -}
 
 type Codec

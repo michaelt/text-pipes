@@ -169,9 +169,6 @@ toHandle :: MonadIO m => IO.Handle -> Consumer' Text m r
 toHandle h = for cat (liftIO . T.hPutStr h)
 {-# INLINABLE toHandle #-}
 
-{-# RULES "p >-> toHandle h" forall p h .
-        p >-> toHandle h = for p (\txt -> liftIO (T.hPutStr h txt))
-  #-}
 
 
 -- | Stream text into a file. Uses @pipes-safe@.
