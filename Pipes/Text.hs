@@ -790,4 +790,4 @@ intercalate p0 = go0
 -}
 
 
-type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
+type Lens' a b =  Functor f => (b -> f b) -> (a -> f a)
