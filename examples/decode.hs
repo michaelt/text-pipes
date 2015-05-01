@@ -10,7 +10,8 @@ import qualified Pipes.ByteString as ByteString
 import qualified Pipes.Text as Text
 import qualified Pipes.Text.Encoding as Text
 
--- Retrieve all `Text` chunks up to 10 characters
+-- Retrieve utf8-encode `Text` chunk(s) up to 10 characters
+-- from the bytestring (this can have various byte lengths)
 parser :: Monad m => Parser ByteString m [Text]
 parser = zoom (Text.utf8 . Text.splitAt 10) drawAll
 
