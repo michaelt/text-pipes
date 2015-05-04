@@ -18,10 +18,10 @@ testParser = do
   return $ Test a b
   
 main = IO.withFile "./testfile" IO.ReadMode $ \handle -> runEffect $
-    for  (parsed testParser (fromHandle handle)) 
-         (lift . print)
-
-
+   do leftover <- for (parsed testParser (fromHandle handle)) 
+                   (lift . print)
+      return () -- ignore unparsed material
+      
 -- >>> :! cat testfile
 -- 1 1
 -- 2 2
