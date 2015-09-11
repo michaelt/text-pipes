@@ -28,8 +28,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Pipes
 import qualified Pipes.Safe.Prelude as Safe
-import qualified Pipes.Safe as Safe
-import Pipes.Safe (MonadSafe(..), Base(..))
+import Pipes.Safe (MonadSafe(..))
 import Prelude hiding (readFile, writeFile)
 
 {- $textio

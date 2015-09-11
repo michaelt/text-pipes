@@ -53,7 +53,6 @@ module Pipes.Text.Encoding
 import Data.Functor.Constant (Constant(..))
 import Data.Char (ord)
 import Data.ByteString as B 
-import Data.ByteString (ByteString)
 import Data.ByteString.Char8 as B8
 import Data.Text (Text)
 import qualified Data.Text as T 
@@ -61,7 +60,6 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Streaming.Text as Stream
 import Data.Streaming.Text (DecodeResult(..))
 import Control.Monad (join, liftM)
-import Data.Word (Word8)
 import Pipes
 
 
@@ -93,7 +91,7 @@ import Pipes
 >   for (decodeUtf16BE bytes) encodeUtf8 :: Producer ByteString IO (Producer ByteString IO ())
     
     The bytestring producer that is returned begins with where utf16BE decoding
-    failed; it it didn't fail the producer is empty. 
+    failed; if it didn't fail the producer is empty. 
 
 -}
 
@@ -231,7 +229,7 @@ decode codec a = getConstant (codec Constant a)
 
 eof :: Monad m => Lens' (Producer Text m (Producer ByteString m r))
                        (Producer Text m (Either (Producer ByteString m r) r))
-eof k p = fmap fromEither (k (toEither p)) where
+eof k p0 = fmap fromEither (k (toEither p0)) where
 
  fromEither = liftM (either id return)
 
@@ -270,13 +268,14 @@ decodeStream :: Monad m
 decodeStream = loop where
   loop dec0 p = 
     do x <- lift (next p) 
-       case x of Left r -> return (return r)
-                 Right (chunk, p') -> case dec0 chunk of 
-                    DecodeResultSuccess text dec -> do yield text
-                                                       loop dec p'
-                    DecodeResultFailure text bs -> do yield text 
-                                                      return (do yield bs 
-                                                                 p')
+       case x of 
+         Left r -> return (return r)
+         Right (chunk, p') -> case dec0 chunk of 
+           DecodeResultSuccess text dec -> do yield text
+                                              loop dec p'
+           DecodeResultFailure text bs -> do yield text 
+                                             return (do yield bs 
+                                                        p')
 {-# INLINABLE decodeStream#-}
 
 

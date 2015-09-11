@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Trustworthy #-}
+{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Safe#-}
 
 {-| The module @Pipes.Text@ closely follows @Pipes.ByteString@ from 
     the @pipes-bytestring@ package. A draft tutorial can be found in
@@ -79,9 +79,8 @@ module Pipes.Text  (
     , module Pipes.Group
     ) where
 
-import Control.Applicative ((<*))
 import Control.Monad (liftM, join)
-import Control.Monad.Trans.State.Strict (StateT(..), modify)
+import Control.Monad.Trans.State.Strict (modify)
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Text.Lazy as TL
@@ -96,7 +95,6 @@ import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
 import qualified Pipes.Prelude as P
 import Data.Char (isSpace)
-import Data.Word (Word8)
 import Foreign.Storable (sizeOf)
 import Data.Bits (shiftL)
 import Prelude hiding (
