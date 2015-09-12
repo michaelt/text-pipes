@@ -65,27 +65,48 @@ import Pipes
 
 
 {- $usage
-    Given 
+    Encoding is of course simple. Given 
 
 >   text :: Producer Text IO ()
 
-    we can encode it with @Data.Text.Encoding@ and ordinary pipe operations:
+    we can encode it with @Data.Text.Encoding.encodeUtf8@ 
+
+>   TE.encodeUtf8 :: Text -> ByteString
+
+    and ordinary pipe operations:
 
 >   text >-> P.map TE.encodeUtf8 :: Producer.ByteString IO ()
 
-    or, using this module, with
+    or, equivalently
+
+>   for text (yield . TE.encodeUtf8)
+
+    But, using this module, we might use
+
+>   encodeUtf8 :: Text -> Producer ByteString m ()
+
+    to write
 
 >   for text encodeUtf8 :: Producer.ByteString IO ()
 
-    Given 
+    All of the above come to the same. 
 
->   bytes :: Producer ByteString Text IO ()
+
+    Given
+
+>   bytes :: Producer ByteString IO ()
 
     we can apply a decoding function from this module:
 
 >   decodeUtf8 bytes :: Producer Text IO (Producer ByteString IO ())
 
-    The Text producer ends wherever decoding first fails. Thus we can re-encode
+    The Text producer ends wherever decoding first fails. The un-decoded
+    material is returned. If we are confident it is of no interest, we can
+    write: 
+
+>   void $ decodeUtf8 bytes :: Producer Text IO ()
+
+    Thus we can re-encode
     as uft8 as much of our byte stream as is decodeUtf16BE decodable, with, e.g.
 
 >   for (decodeUtf16BE bytes) encodeUtf8 :: Producer ByteString IO (Producer ByteString IO ())
@@ -96,12 +117,13 @@ import Pipes
 -}
 
 {- $lenses
-    We get a bit more flexibility, though, if we use a lens like @utf8@ or @utf16BE@ 
-    that looks for text in an appropriately encoded byte stream.
+    We get a bit more flexibility, particularly in the use of pipes-style "parsers", 
+    if we use a lens like @utf8@ or @utf16BE@ 
+    that focusses on the text in an appropriately encoded byte stream.
 
 >   type Lens' a b = forall f . Functor f => (b -> f b) -> (a -> f a)
 
-    is just an alias for a Prelude type.   We abbreviate this further, for our use case, as
+    is just an alias for a Prelude type.  We abbreviate this further, for our use case, as
 
 >   type Codec
 >     =  forall m r .  Monad m => Lens' (Producer ByteString m r) (Producer Text m (Producer ByteString m r))
@@ -109,9 +131,11 @@ import Pipes
     and call the decoding lenses @utf8@, @utf16BE@ \"codecs\", since they can 
     re-encode what they have decoded.  Thus you use any particular codec with
     the @view@ / @(^.)@ , @zoom@ and @over@ functions from the standard lens libraries;
-    we presuppose neither <http://hackage.haskell.org/package/lens lens> 
-    nor  <http://hackage.haskell.org/package/lens-family lens-family> 
-    since we already have access to the types they require.             
+    <http://hackage.haskell.org/package/lens lens>,
+    <http://hackage.haskell.org/package/lens-family lens-family>,
+    <http://hackage.haskell.org/package/lens-simple lens-simple>, or one of the
+    and <http://hackage.haskell.org/package/microlens microlens> packages will all work
+    the same, since we already have access to the types they require.      
 
     Each decoding lens looks into a byte stream that is supposed to contain text.
     The particular lenses are named in accordance with the expected 
@@ -122,8 +146,7 @@ import Pipes
 >   decode utf8 Byte.stdin :: Producer Text IO (Producer ByteString IO r)
 >   Bytes.stdin ^. utf8 ::  Producer Text IO (Producer ByteString IO r)
 
-    These simple uses of a codec with @view@ or @(^.)@ or 'decode' can always be replaced by 
-    the specialized decoding functions exported here, e.g. 
+    Of course, we could always do this with the specialized decoding functions, e.g. 
 
 >   decodeUtf8 ::  Producer ByteString m r -> Producer Text m (Producer ByteString m r)
 >   decodeUtf8 Byte.stdin :: Producer Text IO (Producer ByteString IO r)
@@ -161,7 +184,7 @@ import Pipes
 
 >   return (Left bad_bytestream)
 
-    @zoom@ converts a Text parser into a ByteString parser:
+    @zoom utf8@ converts a Text parser into a ByteString parser:
 
 >   zoom utf8 drawChar :: Monad m => StateT (Producer ByteString m r) m (Maybe Char)
 
@@ -178,7 +201,7 @@ import Pipes
 
      Though @charPlusByte@ is partly defined with a Text parser 'drawChar'; 
      but it is a ByteString parser; it will return the first valid utf8-encoded 
-     Char in a ByteString, whatever its byte-length, 
+     Char in a ByteString, /whatever its byte-length/, 
      and the first byte following, if both exist. Because 
      we \'draw\' one and \'peek\' at the other, the parser as a whole only 
      advances one Char's length along the bytestring, whatever that length may be.
@@ -227,8 +250,8 @@ decode codec a = getConstant (codec Constant a)
 
 -}
 
-eof :: Monad m => Lens' (Producer Text m (Producer ByteString m r))
-                       (Producer Text m (Either (Producer ByteString m r) r))
+eof :: (Monad m, Monad (t m), MonadTrans t) => Lens' (t m (Producer ByteString m r))
+                       (t m (Either (Producer ByteString m r) r))
 eof k p0 = fmap fromEither (k (toEither p0)) where
 
  fromEither = liftM (either id return)
