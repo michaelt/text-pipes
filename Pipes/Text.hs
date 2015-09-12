@@ -79,14 +79,19 @@ module Pipes.Text  (
     , module Pipes.Group
     ) where
 
+import Control.Applicative ((*>))
 import Control.Monad (liftM, join)
+import Data.Functor.Constant (Constant(..))
+import Data.Functor.Identity (Identity)
 import Control.Monad.Trans.State.Strict (modify)
+
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Text.Lazy as TL
 import Data.ByteString (ByteString)
-import Data.Functor.Constant (Constant(Constant, getConstant))
-import Data.Functor.Identity (Identity)
+import Data.Char (isSpace)
+import Foreign.Storable (sizeOf)
+import Data.Bits (shiftL)
 
 import Pipes
 import Pipes.Group (folds, maps, concats, intercalates, FreeT(..), FreeF(..))
@@ -94,9 +99,9 @@ import qualified Pipes.Group as PG
 import qualified Pipes.Parse as PP
 import Pipes.Parse (Parser)
 import qualified Pipes.Prelude as P
-import Data.Char (isSpace)
-import Foreign.Storable (sizeOf)
-import Data.Bits (shiftL)
+
+
+
 import Prelude hiding (
     all,
     any,
