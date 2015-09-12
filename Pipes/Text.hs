@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns, Safe#-}
+{-# LANGUAGE RankNTypes, TypeFamilies, BangPatterns#-}
 
 {-| The module @Pipes.Text@ closely follows @Pipes.ByteString@ from 
     the @pipes-bytestring@ package. A draft tutorial can be found in
