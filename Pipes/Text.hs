@@ -79,7 +79,7 @@ module Pipes.Text  (
     , module Pipes.Group
     ) where
 
-import Control.Applicative ((*>))
+import Control.Applicative ((<*))
 import Control.Monad (liftM, join)
 import Data.Functor.Constant (Constant(..))
 import Data.Functor.Identity (Identity)
