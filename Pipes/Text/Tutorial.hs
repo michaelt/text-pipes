@@ -43,8 +43,8 @@ import Pipes.Text.Encoding
 {- $intro
     This package provides @pipes@ utilities for /character streams/,
     realized as streams of 'Text' chunks. The individual chunks are uniformly /strict/,
-    and thus the @Text@ type we are using is the one from @Data.Text@, not @Data.Text.Lazy@ 
-    But the type @Producer Text m r@, as we are using it, is a sort of /pipes/ equivalent of 
+    and thus the @Text@ type we are using is always the one from @Data.Text@, not @Data.Text.Lazy@ 
+    The type @Producer Text m r@, as we are using it, is a sort of /pipes/ equivalent of 
     the lazy @Text@ type.
 -}
 
@@ -60,13 +60,16 @@ import Pipes.Text.Encoding
 
 {- $pipestextencoding 
     In the @text@ library, @Data.Text.Lazy.Encoding@ 
-    handles inter-operation with @Data.ByteString.Lazy@. Here, @Pipes.Text.Encoding@ 
+    handles inter-operation with @Data.ByteString.Lazy@. Similarly here, @Pipes.Text.Encoding@ 
     provides for interoperation with the \'effectful ByteStrings\' of @Pipes.ByteString@.
 -}
 
 {- $pipestextio
     Simple /IO/ operations are defined in @Pipes.Text.IO@ - as lazy IO @Text@
-    operations are in @Data.Text.Lazy.IO@. It is generally 
+    operations are in @Data.Text.Lazy.IO@. There are also some simple line-based operations
+    in @Pipes.Prelude.Text@. The latter do not depend on the conception of effectful text
+    implemented elsewhere in this package, but just improve on the @stdinLn@ and @writeFile@ of
+    @Pipes.Prelude@ and @Pipes.Safe.Prelude@ by replacing 'String' with 'Text'
 -} 
 
 
@@ -139,7 +142,8 @@ import Pipes.Text.Encoding
     are a distraction. The lens combinators to keep in mind, the ones that make sense for
     our lenses, are @view@, @over@, and @zoom@.
 
-    One need only keep in mind that if @l@ is a @Lens' a b@, then:
+    One need only keep in mind that if @l@ is a @Lens' a b@, then the action of the 
+    leading operations, @view@, @over@, and @zoom@ are as follows:
 
 -}
 {- $view
