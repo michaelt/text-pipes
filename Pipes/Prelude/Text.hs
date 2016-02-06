@@ -55,7 +55,17 @@ THREE
 
    The point of view is very much that of @Pipes.Prelude@. It would still be the same even if
    we did something more sophisticated, like run an ordinary attoparsec 'Text' parser on 
-   each line, as if frequently reasonable.
+   each separate line with @Pipes.Prelude.map ()* , as is frequently reasonable. Here we admit
+   three values from standard input that pass the standard attoparsec @scientific@ number parser,
+   dropping bad parses with @P.concat@:
+
+>>> P.toListM $ stdinLn >->  P.map (A.parseOnly A.scientific) >-> P.concat >-> P.take 3
+1<Enter>
+2<Enter>
+bad<Enter>
+3<Enter>
+[1.0,2.0,3.0]
+
 
    The line-based operations are, however, subject to a number of caveats.
    First, where they read from a handle, they will of course happily 
