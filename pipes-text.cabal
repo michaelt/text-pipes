@@ -1,5 +1,5 @@
 name:                pipes-text
-version:             0.0.1.0
+version:             0.0.2.0
 synopsis:            Text pipes.
 description:         * This organization of the package follows the rule 
                      .
@@ -48,5 +48,5 @@ library
   ghc-options: -O2
 
   if !flag(noio)
-    exposed-modules:   Pipes.Text.IO, Pipes.Text.Tutorial
+    exposed-modules:   Pipes.Text.IO, Pipes.Text.Tutorial, Pipes.Prelude.Text
     build-depends:     text >=0.11.3              && < 1.3
