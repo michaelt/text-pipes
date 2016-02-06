@@ -11,8 +11,10 @@ module Pipes.Text.IO
    
    -- * Producers
    fromHandle
+   , fromHandleLn
    , stdin
    , readFile
+   , readFileLn
    -- * Consumers
    , toHandle
    , stdout
@@ -119,6 +121,19 @@ fromHandle h =  go where
                                     go 
 {-# INLINABLE fromHandle#-}
 
+
+fromHandleLn :: MonadIO m => IO.Handle -> Producer Text m ()
+fromHandleLn h =  go where
+      getLine :: IO (Either G.IOException Text)
+      getLine = try (T.hGetLine h)
+
+      go = do txt <- liftIO getLine
+              case txt of
+                Left e  -> return ()
+                Right y -> do yield y
+                              go
+{-# INLINABLE fromHandleLn #-}
+
 -- | Stream text from 'stdin'
 stdin :: MonadIO m => Producer Text m ()
 stdin = fromHandle IO.stdin
@@ -134,6 +149,13 @@ MAIN = PUTSTRLN "HELLO WORLD"
 readFile :: MonadSafe m => FilePath -> Producer Text m ()
 readFile file = Safe.withFile file IO.ReadMode fromHandle
 {-# INLINE readFile #-}
+
+
+{-| Stream lines of text from a file
+-}
+readFileLn :: MonadSafe m => FilePath -> Producer Text m ()
+readFileLn file = Safe.withFile file IO.ReadMode fromHandleLn
+{-# INLINE readFileLn #-}
 
 
 {-| Stream text to 'stdout'
