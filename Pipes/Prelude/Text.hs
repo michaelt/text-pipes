@@ -28,13 +28,14 @@ import Pipes.Safe (MonadSafe(..), runSafeT, runSafeP)
 import Prelude hiding (readFile, writeFile)
 
 {- $lineio
-   Line-based operations are marked with a final \-@Ln@, like 'stdinLn', 'readFileLn'. They are
+   Line-based operations are marked with a final \-@Ln@, like 'stdinLn', 'readFileLn', etc. They are
    drop-in replacements for the line-based operations in @Pipes.Prelude@ and
    @Pipes.Safe.Prelude@ - the final \-@Ln@ being added where necessary. 
    With them, one is producing, piping and consuming semantically significant individual texts, 
-   understood as lines, just as one would pipe 'Int's. The standard materials from @Pipes@ and @Pipes.Prelude@ and
-   @Data.Text@ are all you need to interact with these lines as you read or write them.
-   You can use these operations without using any of the other material in this package. 
+   understood as lines, just as one would produce or pipe 'Int's or 'Char's or anything else.
+   Thus, the standard materials from @Pipes@ and @Pipes.Prelude@ and
+   @Data.Text@ are all you need to interact with these lines as you read or write them, and
+   you can use these operations without using any of the other material in this package. 
 
    Thus, to take a trivial case, here we upper-case three lines from standard input and write 
    them to a file.
@@ -52,8 +53,9 @@ ONE
 TWO
 THREE
 
-   The point of view is very much that of @Pipes.Prelude@ and the user who needs no more
-   can use them ignoring the rest of this package.
+   The point of view is very much that of @Pipes.Prelude@. It would still be the same even if
+   we did something more sophisticated, like run an ordinary attoparsec 'Text' parser on 
+   each line, as if frequently reasonable.
 
    The line-based operations are, however, subject to a number of caveats.
    First, where they read from a handle, they will of course happily 
