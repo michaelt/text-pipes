@@ -52,5 +52,5 @@ library
   ghc-options: -O2
 
   if !flag(noio)
-    exposed-modules:   Pipes.Text.IO, Pipes.Prelude.Text
+    exposed-modules:   Pipes.Text.IO, Pipes.Text.Tutorial,  Pipes.Prelude.Text
     build-depends:     text >=0.11.3              && < 1.3
