@@ -13,6 +13,7 @@ module Pipes.Text.IO
    fromHandle
    , stdin
    , readFile
+   , readFileLines
    -- * Consumers
    , toHandle
    , stdout
