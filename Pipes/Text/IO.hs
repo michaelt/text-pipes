@@ -136,6 +136,24 @@ readFile file = Safe.withFile file IO.ReadMode fromHandle
 {-# INLINE readFile #-}
 
 
+{-| Stream lines of text from a file
+-}
+readFileLines :: MonadSafe m => FilePath -> Producer Text m ()
+readFileLines file = Safe.withFile file IO.ReadMode fromHandleLines
+  where
+    fromHandleLines :: MonadIO m => IO.Handle -> Producer Text m ()
+    fromHandleLines h =  go where
+          getLine :: IO (Either G.IOException Text)
+          getLine = try (T.hGetLine h)
+
+          go = do txt <- liftIO getLine
+                  case txt of
+                    Left e  -> return ()
+                    Right y -> do yield y
+                                  go
+{-# INLINE readFileLines #-}
+
+
 {-| Stream text to 'stdout'
 
     Unlike 'toHandle', 'stdout' gracefully terminates on a broken output pipe.
