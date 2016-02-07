@@ -54,12 +54,13 @@ TWO
 THREE
 
    The point of view is very much that of @Pipes.Prelude@. It would still be the same even if
-   we did something more sophisticated, like run an ordinary attoparsec 'Text' parser on 
-   each separate line with @Pipes.Prelude.map ()* , as is frequently reasonable. Here we admit
-   three values from standard input that pass the standard attoparsec @scientific@ number parser,
+   we did something more sophisticated, like run an ordinary attoparsec 'Text' parser on, 
+   as is frequently reasonable. Here we run 
+   the simple attoparsec @scientific@ number parser on lines of standard input, 
    dropping bad parses with @P.concat@:
 
->>> P.toListM $ stdinLn >->  P.map (A.parseOnly A.scientific) >-> P.concat >-> P.take 3
+>>> import qualified Data.Attoparsec.Text as A
+>>> P.toListM $ Text.stdinLn >->  P.map (A.parseOnly A.scientific) >-> P.concat >-> P.take 3
 1<Enter>
 2<Enter>
 bad<Enter>
