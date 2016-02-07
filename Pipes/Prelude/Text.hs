@@ -28,14 +28,14 @@ import Pipes.Safe (MonadSafe(..), runSafeT, runSafeP)
 import Prelude hiding (readFile, writeFile)
 
 {- $lineio
-   Line-based operations are marked with a final \-@Ln@, like 'stdinLn', 'readFileLn', etc. They are
-   drop-in replacements for the line-based operations in @Pipes.Prelude@ and
-   @Pipes.Safe.Prelude@ - the final \-@Ln@ being added where necessary. 
-   With them, one is producing, piping and consuming semantically significant individual texts, 
+   Line-based operations are marked with a final \-@Ln@, like 'stdinLn', 'readFileLn', etc. 
+   They are drop-in 'Text' replacements for the corresponding 'String' operations in 
+   @Pipes.Prelude@ and @Pipes.Safe.Prelude@ - a final \-@Ln@ being added where necessary. 
+   In using them, one is producing and consuming semantically significant individual texts, 
    understood as lines, just as one would produce or pipe 'Int's or 'Char's or anything else.
    Thus, the standard materials from @Pipes@ and @Pipes.Prelude@ and
-   @Data.Text@ are all you need to interact with these lines as you read or write them, and
-   you can use these operations without using any of the other material in this package. 
+   @Data.Text@ are all you need to work with them, and
+   you can use these operations without using any of the other modules in this package. 
 
    Thus, to take a trivial case, here we upper-case three lines from standard input and write 
    them to a file.
@@ -54,9 +54,9 @@ TWO
 THREE
 
    The point of view is very much that of @Pipes.Prelude@. It would still be the same even if
-   we did something more sophisticated, like run an ordinary attoparsec 'Text' parser on, 
-   as is frequently reasonable. Here we run 
-   the simple attoparsec @scientific@ number parser on lines of standard input, 
+   we did something a bit more sophisticated, like run an ordinary attoparsec 'Text' parser on
+   each line, as is frequently desirable.  Here we run 
+   a minimal attoparsec number parser, @scientific@, on separate lines of standard input, 
    dropping bad parses with @P.concat@:
 
 >>> import qualified Data.Attoparsec.Text as A
@@ -94,7 +94,7 @@ stdinLn = fromHandleLn IO.stdin
 {-# INLINABLE stdinLn #-}
 
 
-{-| Write 'String's to 'IO.stdout' using 'putStrLn'
+{-| Write 'Text' lines to 'IO.stdout' using 'putStrLn'
 
     Unlike 'toHandle', 'stdoutLn' gracefully terminates on a broken output pipe
 -}
@@ -113,7 +113,7 @@ stdoutLn = go
            Right () -> go
 {-# INLINABLE stdoutLn #-}
 
-{-| Write lines of 'Text's to 'IO.stdout'.
+{-| Write lines of 'Text' to 'IO.stdout'.
 
     This does not handle a broken output pipe, but has a polymorphic return
     value.
