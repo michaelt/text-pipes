@@ -42,7 +42,7 @@ import Prelude hiding (readFile, writeFile)
 
 >>> import Pipes
 >>> import qualified Pipes.Prelude as P
->>> import qualified Pipes.Text.IO as Text
+>>> import qualified Pipes.Prelude.Text as Text
 >>> import qualified Data.Text as T
 >>> Text.runSafeT $ runEffect $ Text.stdinLn >-> P.take 3 >-> P.map T.toUpper >-> Text.writeFileLn "threelines.txt"
 one<Enter>
@@ -53,33 +53,38 @@ ONE
 TWO
 THREE
 
-   The point of view is very much that of @Pipes.Prelude@. It would still be the same even if
+   Here @runSafeT@ from @Pipes.Safe@ just makes sure to close any handles opened in its scope. 
+   Otherwise the point of view is very much that of @Pipes.Prelude@, substituting @Text@ for @String@. 
+   It would still be the same even if
    we did something a bit more sophisticated, like run an ordinary attoparsec 'Text' parser on
-   each line, as is frequently desirable.  Here we run 
+   each line, as is frequently desirable.  Here we use
    a minimal attoparsec number parser, @scientific@, on separate lines of standard input, 
    dropping bad parses with @P.concat@:
 
->>> import qualified Data.Attoparsec.Text as A
->>> P.toListM $ Text.stdinLn >->  P.map (A.parseOnly A.scientific) >-> P.concat >-> P.take 3
+>>> import Data.Attoparsec.Text (parseOnly, scientific)
+>>> P.toListM $ Text.stdinLn >-> P.takeWhile (/= "quit") >-> P.map (parseOnly scientific) >-> P.concat 
 1<Enter>
 2<Enter>
 bad<Enter>
 3<Enter>
+quit<Enter>
 [1.0,2.0,3.0]
-
 
    The line-based operations are, however, subject to a number of caveats.
    First, where they read from a handle, they will of course happily 
    accumulate indefinitely long lines. This is likely to be legitimate for input 
-   typed in by a user, and for locally produced log files and other known material, but
+   typed in by a user, and for locally produced files of known characteristics, but
    otherwise not. See the post on
    <http://www.haskellforall.com/2013/09/perfect-streaming-using-pipes-bytestring.html perfect streaming> 
-   to see why @pipes-bytestring@ and this package take a different approach. Furthermore, 
-   like those in @Data.Text.IO@, the operations use the system encoding (and @T.hGetLine@)
-   and thus are slower than the \'official\' route, which would use bytestring IO and
-   the encoding and decoding functions in @Pipes.Text.Encoding@. Finally, they will generate
-   text exceptions after the fashion of @Data.Text.Encoding@ rather than returning the 
-   undigested bytes in the style of @Pipes.Text.Encoding@
+   to see why @pipes-bytestring@ and this package, outside this module, take a different approach. 
+   Furthermore, the line-based operations, 
+   like those in @Data.Text.IO@, use the system encoding (and @T.hGetLine@)
+   and thus are slower than the \'official\' route, which would use the very fast 
+   bytestring IO operations from @Pipes.ByteString@ and
+   encoding and decoding functions in @Pipes.Text.Encoding@. Finally, the line-based
+   operations will generate text exceptions after the fashion of 
+   @Data.Text.Encoding@, rather than returning the undigested bytes in the 
+   style of @Pipes.Text.Encoding@.
 
 -}
 
