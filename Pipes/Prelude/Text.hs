@@ -33,7 +33,7 @@ import Prelude hiding (readFile, writeFile)
    @Pipes.Prelude@ and @Pipes.Safe.Prelude@ - a final \-@Ln@ being added where necessary. 
    In using them, one is producing and consuming semantically significant individual texts, 
    understood as lines, just as one would produce or pipe 'Int's or 'Char's or anything else.
-   Thus, the standard materials from @Pipes@ and @Pipes.Prelude@ and
+   The standard materials from @Pipes@ and @Pipes.Prelude@ and
    @Data.Text@ are all you need to work with them, and
    you can use these operations without using any of the other modules in this package. 
 
@@ -78,7 +78,7 @@ quit<Enter>
    <http://www.haskellforall.com/2013/09/perfect-streaming-using-pipes-bytestring.html perfect streaming> 
    to see why @pipes-bytestring@ and this package, outside this module, take a different approach. 
    Furthermore, the line-based operations, 
-   like those in @Data.Text.IO@, use the system encoding (and @T.hGetLine@)
+   like those in @Data.Text.IO@, use the system encoding (and @T.hGetLine@, @T.hPutLine@ etc.)
    and thus are slower than the \'official\' route, which would use the very fast 
    bytestring IO operations from @Pipes.ByteString@ and
    encoding and decoding functions in @Pipes.Text.Encoding@. Finally, the line-based

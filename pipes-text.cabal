@@ -9,9 +9,9 @@ description:         * This organization of the package follows the rule
                      .
                      Note that the module @Pipes.Text.IO@ is present as a convenience (as is @Data.Text.IO@).  Official pipes IO would use @Pipes.ByteString@ together with the bytestring decoding functions in @Pipes.Text.Encoding@.  In particular, the @Pipes.Text.IO@ functions use Text exceptions. 
                      .
-                     The fourth module @Pipes.Prelude.Text@ just exports line-based Text producers and consumers as a drop-in replacement for the String material in @Pipes.Prelude@ and @Pipes.Safe.Prelude@. They can be used as one uses @Pipes.Prelude@ without reference to the rest of this package. See the caveats in the documentation for the module.
+                     The fourth module @Pipes.Prelude.Text@ exports line-based Text producers and consumers as a drop-in replacement for the String material in @Pipes.Prelude@ and @Pipes.Safe.Prelude@. They can be used as one uses @Pipes.Prelude@ without reference to the rest of this package. See the caveats in the documentation for that module.
                      .
-                     @Pipes.Text.IO@ and @Pipes.Prelude.Text@ use version 0.11.3 or later of the @text@ library. It thus works with the version of @text@ that came with the 2013 Haskell Platform. To use an older @text@, install with the flag @-fnoio@
+                     @Pipes.Text.IO@ and @Pipes.Prelude.Text@ use version 0.11.3 or later of the @text@ library. To use a (very) old version of @text@, install with the flag @-fnoio@
 
 
 
