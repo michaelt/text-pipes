@@ -84,7 +84,7 @@ import Pipes.Text.Encoding
     in a way that is independent of the boundaries of the underlying @Text@ chunks. 
     This means that they may freely split text into smaller texts and /discard empty texts/.  
     The objective, though, is that they should not /concatenate texts/ in order to provide strict upper
-    bounds on memory usage.
+    bounds on memory usage even for indefinitely complex compositions.
 
     For example, to stream only the first three lines of 'stdin' to 'stdout' you
     might write:
@@ -93,12 +93,12 @@ import Pipes.Text.Encoding
 > import qualified Pipes.Text as Text
 > import qualified Pipes.Text.IO as Text
 > import Pipes.Group (takes')
-> import Lens.Family (view, (%~)) -- or, Control.Lens
+> import Lens.Family (view, over) -- or `Lens.Micro.Mtl` or `Control.Lens` or etc.
 >
 > main = runEffect $ takeLines 3 Text.stdin >-> Text.stdout
 >   where 
 >     takeLines n = view Text.unlines . takes' n . view Text.lines
-> -- or equivalently: Text.unlines %~ takes' n
+> -- or equivalently: over Text.unlines (takes' n)
 
      This program will not bring more into memory than what @Text.stdin@ considers
      one chunk of text (~ 32 KB), even if individual lines are split 
