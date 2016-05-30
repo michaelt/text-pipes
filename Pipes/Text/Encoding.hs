@@ -220,14 +220,17 @@ type Codec
 
 
 {- | @decode@ is just the ordinary @view@ or @(^.)@ of the lens libraries;
-   exported here under a name appropriate to the material. Thus
+   exported here under a name appropriate to the material. 
+   Thus given a bytestring producer called @bytes@ we have
 
 >    decode utf8 bytes :: Producer Text IO (Producer ByteString IO ())
 
     All of these are thus the same:
 
->    decode utf8 bytes = view utf8 bytes = bytes ^. utf8 = decodeUtf8 bytes
-
+>    decode utf8 bytes 
+>    view utf8 bytes
+>    bytes ^. utf8 
+>    decodeUtf8 bytes
 
 -}
 
@@ -244,9 +247,11 @@ decode codec a = getConstant (codec Constant a)
     returned as a Left value; in the happy case, a Right value is returned 
     with the anticipated return value for the original bytestring producer.
 
-    Again, all of these are the same
+    Given a bytestring producer called @bytes@ all of these will be the same:
 
->    decode (utf8 . eof) bytes = view (utf8 . eof) p = p^.utf8.eof
+>    decode (utf8 . eof) bytes 
+>    view (utf8 . eof) bytes
+>    bytes^.utf8.eof
 
 -}
 
