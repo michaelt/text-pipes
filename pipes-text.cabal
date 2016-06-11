@@ -1,5 +1,5 @@
 name:                pipes-text
-version:             0.0.2.3
+version:             0.0.2.4
 synopsis:            properly streaming text
 description:         /New in version 0.0.2.x/: The new module @Pipes.Prelude.Text@ exports line-based @Text@ producers and consumers as a drop-in replacement for the @String@ material in @Pipes.Prelude@ and @Pipes.Safe.Prelude@. They can be used as one uses @Pipes.Prelude@ without reference to the rest of this package. See the caveats in the documentation for that module.
                      .
