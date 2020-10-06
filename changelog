@@ -1,8 +1,16 @@
+# Version 1.0.0.0
+
+* New maintainer: Peter Jones
+
+* Widen version bounds for dependencies.
+
+* Add files for `stack`.
+
 # Version 0.0.0.12
 
-* Opposing lenses for `lines` and `unlines` and `words` and `unwords`. 
+* Opposing lenses for `lines` and `unlines` and `words` and `unwords`.
   Brought closer in line with `pipes-bytestring` again. Removed `count`, which
-  was wrong. Scrapped `Iso` and the `profunctors` dependency. 
+  was wrong. Scrapped `Iso` and the `profunctors` dependency.
 
 # Version 0.0.0.11
 
@@ -23,7 +31,7 @@
  * Separated IO and Encoding modules adding flag -fnoio
 
  # Version 0.0.0.5
- 
+
  * Rearranged internal modules
 
 
@@ -33,7 +41,7 @@
 
 
  # Version 0.0.0.3
- 
+
  * Actually added changelog
 
 
@@ -45,5 +53,3 @@
  # Version 0.0.0.1
 
  * Rearrange order of 'Internal' materials.
-
-

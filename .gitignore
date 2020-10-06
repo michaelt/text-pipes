@@ -9,3 +9,5 @@ cabal-dev
 *.sh
 .virthualenv
 
+/.stack-work/
+/cabal.project.local
