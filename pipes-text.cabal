@@ -1,5 +1,5 @@
 name:               pipes-text
-version:            1.0.0.0
+version:            1.0.0
 synopsis:           properly streaming text
 description:
   The organization of this package follows the rule:
@@ -7,7 +7,7 @@ description:
   * @pipes-text : pipes-bytestring :: text : bytestring@
   .
   Familiarity with the other three packages should give one an idea
-  what to expect where. The package has three principal modules,
+  what to expect here. The package has three principal modules,
   @Pipes.Text@ , @Pipes.Text.Encoding@ and @Pipes.Text.IO@; the
   division has more or less the significance it has in the @text@
   library.
@@ -37,8 +37,8 @@ category:           Text, Pipes
 build-type:         Simple
 cabal-version:      >=1.10
 extra-source-files:
-  README.md
   changelog
+  README.md
 
 source-repository head
   type:     git
@@ -48,6 +48,11 @@ flag noio
   default:     False
   description: Use a version of text earlier than 0.11.3
 
+flag maintainer
+  description: Enable settings for the package maintainer.
+  manual:      True
+  default:     False
+
 library
   exposed-modules:
     Pipes.Text
@@ -55,7 +60,7 @@ library
 
   build-depends:
       base               >=4       && <5
-    , bytestring         >=0.9.2.1 && <0.11
+    , bytestring         >=0.9.2.1 && <0.12
     , pipes              >=4.0     && <4.4
     , pipes-bytestring   >=1.0     && <2.2
     , pipes-group        >=1.0.0   && <1.1
@@ -67,6 +72,9 @@ library
 
   other-extensions: RankNTypes
   default-language: Haskell2010
+
+  if flag(maintainer)
+    ghc-options: -Werror
 
   if !flag(noio)
     exposed-modules:

@@ -1,0 +1,6 @@
+cradle:
+  cabal:
+    - path: "./"
+      component: "lib:pipes-text"
+    - path: "./test"
+      component: "test:test"

@@ -1,4 +1,16 @@
 {
+    "haskellrc": {
+        "branch": "master",
+        "description": "Peter's Haskell Config Files and Scripts",
+        "homepage": null,
+        "owner": "pjones",
+        "repo": "haskellrc",
+        "rev": "3ae63e7ec878f622fc2a9409447e2b8b45c15403",
+        "sha256": "137gign21bxb6qv3mv2dshvxl7yjp15y99a6w6rycxcm0h28xdmv",
+        "type": "tarball",
+        "url": "https://github.com/pjones/haskellrc/archive/3ae63e7ec878f622fc2a9409447e2b8b45c15403.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
     "niv": {
         "branch": "master",
         "description": "Easy dependency management for Nix projects",
@@ -17,10 +29,10 @@
         "homepage": "",
         "owner": "pjones",
         "repo": "nix-hs",
-        "rev": "50fc69e6416f57f80bbf1ede3249a2c92e4a7e9c",
-        "sha256": "1i67v2hvylffkcj28c41kb9y08wzh3pr2nal26dpksiz4cgvrlgk",
+        "rev": "c47f5e52d1d2ef1621cbe627fba11164b12cac19",
+        "sha256": "0ld5jminbazfb99amysxy6m50mmlk04smfd93fqz6hilxwfq7lv9",
         "type": "tarball",
-        "url": "https://github.com/pjones/nix-hs/archive/50fc69e6416f57f80bbf1ede3249a2c92e4a7e9c.tar.gz",
+        "url": "https://github.com/pjones/nix-hs/archive/c47f5e52d1d2ef1621cbe627fba11164b12cac19.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "nixpkgs": {

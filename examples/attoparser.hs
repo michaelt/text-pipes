@@ -1,13 +1,15 @@
-import Pipes
-import Pipes.Text.IO (fromHandle)
-import Pipes.Attoparsec (parsed)
-import qualified System.IO as IO
-import Data.Attoparsec.Text
 import Control.Applicative
-data Test = Test {
-  a :: Int,
-  b :: Int
-  } deriving (Show)
+import Data.Attoparsec.Text
+import Pipes
+import Pipes.Attoparsec (parsed)
+import Pipes.Text.IO (fromHandle)
+import qualified System.IO as IO
+
+data Test = Test
+  { a :: Int,
+    b :: Int
+  }
+  deriving (Show)
 
 testParser :: Parser Test
 testParser = do
@@ -16,12 +18,15 @@ testParser = do
   b <- decimal
   endOfLine
   return $ Test a b
-  
+
 main = IO.withFile "./testfile" IO.ReadMode $ \handle -> runEffect $
-   do leftover <- for (parsed testParser (fromHandle handle)) 
-                   (lift . print)
-      return () -- ignore unparsed material
-      
+  do
+    leftover <-
+      for
+        (parsed testParser (fromHandle handle))
+        (lift . print)
+    return () -- ignore unparsed material
+
 -- >>> :! cat testfile
 -- 1 1
 -- 2 2
@@ -45,5 +50,3 @@ main = IO.withFile "./testfile" IO.ReadMode $ \handle -> runEffect $
 -- Test {a = 8, b = 8}
 -- Test {a = 9, b = 9}
 -- Test {a = 10, b = 10}
-
-
