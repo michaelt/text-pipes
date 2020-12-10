@@ -4,6 +4,8 @@
 
 * Widen version bounds for dependencies.
 
+* The `noio` flag is deprecated and will be removed in the next major release.
+
 # Version 0.0.0.12
 
 * Opposing lenses for `lines` and `unlines` and `words` and `unwords`.

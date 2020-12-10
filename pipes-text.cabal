@@ -23,10 +23,6 @@ description:
   * @decodeUtf8 :: Monad m => Producer ByteString m r -> Producer Text m (Producer ByteString m r)@
   .
   where any unparsed bytes are returned.
-  .
-  @Pipes.Text.IO@ and @Pipes.Prelude.Text@ use version 0.11.3 or later
-  of the @text@ library; older versions of @text@ can be used with the
-  flag @-fnoio@
 
 homepage:           https://github.com/pjones/pipes-text
 bug-reports:        https://github.com/pjones/pipes-text/issues
@@ -37,7 +33,7 @@ maintainer:         Peter Jones <pjones@devalot.com>
 category:           Text, Pipes
 build-type:         Simple
 extra-source-files:
-  changelog
+  CHANGES.md
   README.md
 
 source-repository head
