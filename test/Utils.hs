@@ -1,18 +1,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Utils where
+module Utils (eq, (=^=), genUnicode) where
 
-import Control.Exception (SomeException, bracket, bracket_, evaluate, try)
+import Control.Exception (SomeException, evaluate, try)
 import Data.Bits ((.&.))
 import qualified Data.ByteString as B
 import Data.Char (chr)
 import Data.String (IsString, fromString)
 import Debug.Trace (trace)
-import Pipes.Text.Internal
 import System.IO.Unsafe (unsafePerformIO)
-import System.Random (Random (..), RandomGen)
 import Test.QuickCheck hiding ((.&.))
-import Test.QuickCheck.Monadic (assert, monadicIO, run)
 
 -- Ensure that two potentially bottom values (in the sense of crashing
 -- for some inputs, not looping infinitely) either both crash, or both

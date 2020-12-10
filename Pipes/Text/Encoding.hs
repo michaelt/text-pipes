@@ -52,7 +52,7 @@ module Pipes.Text.Encoding
   )
 where
 
-import Control.Monad (join, liftM)
+import Control.Monad (join)
 import Data.ByteString as B
 import Data.ByteString.Char8 as B8
 import Data.Char (ord)

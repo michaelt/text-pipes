@@ -4,8 +4,6 @@
 
 * Widen version bounds for dependencies.
 
-* Add files for `stack`.
-
 # Version 0.0.0.12
 
 * Opposing lenses for `lines` and `unlines` and `words` and `unwords`.
