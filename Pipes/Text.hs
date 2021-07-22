@@ -138,7 +138,7 @@ import Prelude hiding
 -- IO can be found in 'Pipes.Text.IO' or in pipes-bytestring, employed with the
 -- decoding lenses in 'Pipes.Text.Encoding'
 fromLazy :: (Monad m) => TL.Text -> Producer' Text m ()
-fromLazy = TL.foldrChunks (\e a -> yield e >> a) (return ())
+fromLazy str = TL.foldrChunks (\e a -> yield e >> a) (return ()) str
 {-# INLINE fromLazy #-}
 
 (^.) :: a -> ((b -> Constant b b) -> (a -> Constant b a)) -> b
@@ -410,7 +410,7 @@ unDrawChar c = modify (yield (T.singleton c) >>)
 peekChar :: (Monad m) => Parser Text m (Maybe Char)
 peekChar = do
   x <- drawChar
-  traverse_ unDrawChar x
+  traverse_ (\h -> unDrawChar h) x
   return x
 {-# INLINEABLE peekChar #-}
 

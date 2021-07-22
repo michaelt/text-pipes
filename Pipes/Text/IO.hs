@@ -159,5 +159,5 @@ toHandle h = for cat (liftIO . T.hPutStr h)
 
 -- | Stream text into a file. Uses @pipes-safe@.
 writeFile :: (MonadSafe m) => FilePath -> Consumer' Text m ()
-writeFile file = Safe.withFile file IO.WriteMode toHandle
+writeFile file = Safe.withFile file IO.WriteMode (\h -> toHandle h)
 {-# INLINE writeFile #-}

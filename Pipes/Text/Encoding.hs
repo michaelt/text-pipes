@@ -372,19 +372,19 @@ decodeUtf32BE = decodeStream Stream.decodeUtf32BE
 --   using the encoding functions from Data.Text.Encoding
 
 encodeUtf8 :: Monad m => Text -> Producer' ByteString m ()
-encodeUtf8 = yield . TE.encodeUtf8
+encodeUtf8 str = yield $ TE.encodeUtf8 str
 
 encodeUtf16LE :: Monad m => Text -> Producer' ByteString m ()
-encodeUtf16LE = yield . TE.encodeUtf16LE
+encodeUtf16LE str = yield $ TE.encodeUtf16LE str
 
 encodeUtf16BE :: Monad m => Text -> Producer' ByteString m ()
-encodeUtf16BE = yield . TE.encodeUtf16BE
+encodeUtf16BE str = yield $ TE.encodeUtf16BE str
 
 encodeUtf32LE :: Monad m => Text -> Producer' ByteString m ()
-encodeUtf32LE = yield . TE.encodeUtf32LE
+encodeUtf32LE str = yield $ TE.encodeUtf32LE str
 
 encodeUtf32BE :: Monad m => Text -> Producer' ByteString m ()
-encodeUtf32BE = yield . TE.encodeUtf32BE
+encodeUtf32BE str = yield $ TE.encodeUtf32BE str
 
 mkCodec ::
   ( forall r m.

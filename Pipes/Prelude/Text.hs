@@ -179,11 +179,11 @@ toHandleLn handle = for cat (liftIO . T.hPutStrLn handle)
 --    This operation will accumulate indefinitely long strict text chunks.
 --    See the caveats above.
 readFileLn :: MonadSafe m => FilePath -> Producer Text m ()
-readFileLn file = Safe.withFile file IO.ReadMode fromHandleLn
+readFileLn file = Safe.withFile file IO.ReadMode (\h -> fromHandleLn h)
 {-# INLINE readFileLn #-}
 
 -- | Write lines to a file. Apply @runSafeT@ after running the
 --    pipeline to manage the opening and closing of the handle.
 writeFileLn :: (MonadSafe m) => FilePath -> Consumer' Text m r
-writeFileLn file = Safe.withFile file IO.WriteMode toHandleLn
+writeFileLn file = Safe.withFile file IO.WriteMode (\h -> toHandleLn h)
 {-# INLINEABLE writeFileLn #-}
