@@ -1,0 +1,73 @@
+name: release
+on:
+  push:
+    tags: [ 'v*' ]
+jobs:
+  create_release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+
+  build_release:
+    name: Build Release
+    needs: create_release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # https://www.haskell.org/ghc/
+        # https://hackage.haskell.org/package/cabal-install
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        cabal: ["3.6"]
+        ghc: ["8.10"]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Windows Dependencies
+        if: matrix.os == 'windows-latest'
+        run: choco install zip
+
+      - name: Setup Haskell
+        id: setup-haskell-cabal
+        uses: haskell/actions/setup@v2
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+
+      - name: Configure and Freeze for Cache
+        run: |
+          cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
+          cabal freeze
+
+      - name: Cache ~/.cabal/store
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+          key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+
+      - name: Cabal Install
+        run: cabal install --installdir=artifacts --install-method=copy
+
+      - name: Create Archive
+        run: zip -j ${{ matrix.os }}.zip artifacts/*
+
+      - name: Upload Archive
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          asset_path: ./${{ matrix.os }}.zip
+          asset_name: ${{ matrix.os }}.zip
+          asset_content_type: application/zip
